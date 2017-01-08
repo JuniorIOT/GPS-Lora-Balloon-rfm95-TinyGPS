@@ -1,0 +1,5 @@
+
+Repeat for each zip: 
+
+arduino IDE:
+menu > Sketch > include library > add Zip Library > browse to library zip in the /libraries subfolder
