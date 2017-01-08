@@ -1,3 +1,9 @@
-String addrX = "123456AB";
-String AppSKeyX = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-String NwkSKeyX = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+static const PROGMEM u1_t NWKSKEY[16] = { 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA };
+
+// LoRaWAN AppSKey, application session key
+// This is the default Semtech key, which is used by the early prototype TTN
+// network.
+static const u1_t PROGMEM APPSKEY[16] = { 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA };
+
+// LoRaWAN end-device address (DevAddr)
+static const u4_t DEVADDR = 0x1234AABB ; 
