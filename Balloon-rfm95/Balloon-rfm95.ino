@@ -48,7 +48,12 @@ void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
-uint8_t *mydata;
+uint8_t mydata[9];
+uint32_t LatitudeBinary, LongitudeBinary;
+uint16_t altitudeGps;
+uint8_t hdopGps;
+
+
 static osjob_t sendjob;
 
 // Schedule TX every this many seconds (might become longer due to duty
@@ -248,10 +253,26 @@ void loop() {
     
     alt = gps.f_altitude();
     gps.stats(&chars, &sentences, &failed);
-    String tx = "" + String(long(flat*1000000)) + " " + String(long(flon*1000000)) + " " + String(int(alt)) + " " + String(int(hdopNumber*100));
-    char temp[255];
-    tx.toCharArray(temp,tx.length());
-    mydata = (uint8_t*)temp;
+
+  LatitudeBinary = ((flat + 90) / 180) * 16777215;
+  LongitudeBinary = ((flon + 180) / 360) * 16777215;
+
+  mydata[0] = ( LatitudeBinary >> 16 ) & 0xFF;
+  mydata[1] = ( LatitudeBinary >> 8 ) & 0xFF;
+  mydata[2] = LatitudeBinary & 0xFF;
+
+  mydata[3] = ( LongitudeBinary >> 16 ) & 0xFF;
+  mydata[4] = ( LongitudeBinary >> 8 ) & 0xFF;
+  mydata[5] = LongitudeBinary & 0xFF;
+
+  altitudeGps = alt;
+  mydata[6] = ( altitudeGps >> 8 ) & 0xFF;
+  mydata[7] = altitudeGps & 0xFF;
+
+  hdopGps = hdopNumber*10;
+  mydata[8] = hdopGps & 0xFF;
+  
+    
     os_runloop_once();
     led_off();
     delay(1000);
