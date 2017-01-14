@@ -151,9 +151,11 @@ void do_send(osjob_t* j){
 }
 
 void setup() {
-    Serial.begin(115200);
-    ss.begin(9600);
-    Serial.begin(115200);
+    //Serial.begin(115200);   
+    ss.begin(9600);         // software serial with GPS module
+    pinMode(7, OUTPUT);     // pin 7 is connected to VCC for GPS
+    digitalWrite(7, HIGH);   // power on GPS
+    Serial.begin(115200);   // hardware serial for debug 
     Serial.println(F("Starting"));
 
     #ifdef VCC_ENABLE
@@ -246,16 +248,33 @@ void loop() {
         gps.encode(ss.read());
     } while (millis() - start < 2000);
     
+    Serial.println(F("GPS..."));
     
     
     hdopNumber = gps.hdop();
     gps.f_get_position(&flat, &flon, &age);
-    
+        
     alt = gps.f_altitude();
     gps.stats(&chars, &sentences, &failed);
 
+    
+    Serial.print("  lat, lon, age, alt: ");
+    Serial.print( flat );
+    Serial.print(", ");
+    Serial.print( flon );
+    Serial.print(", ");
+    Serial.print( age );
+    Serial.print(", ");
+    Serial.println( alt);
+
   LatitudeBinary = ((flat + 90) / 180) * 16777215;
   LongitudeBinary = ((flon + 180) / 360) * 16777215;
+
+  
+    Serial.print("  LatitudeBinary, LongitudeBinary: ");
+    Serial.print( LatitudeBinary, HEX);
+    Serial.print(", ");
+    Serial.println( LongitudeBinary, HEX );
 
   mydata[0] = ( LatitudeBinary >> 16 ) & 0xFF;
   mydata[1] = ( LatitudeBinary >> 8 ) & 0xFF;
