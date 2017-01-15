@@ -70,7 +70,8 @@ const lmic_pinmap lmic_pins = {
 
 
 TinyGPS gps;
-SoftwareSerial ss(8, 9);
+SoftwareSerial ss(8, 9);  // originally port 8, 9
+//SoftwareSerial ss(9, 8);    // or try if wires have been reversed
 
 
 void onEvent (ev_t ev) {
@@ -151,12 +152,14 @@ void do_send(osjob_t* j){
 }
 
 void setup() {
-    //Serial.begin(115200);   
-    ss.begin(9600);         // software serial with GPS module
-    pinMode(7, OUTPUT);     // pin 7 is connected to VCC for GPS
-    digitalWrite(7, HIGH);   // power on GPS
     Serial.begin(115200);   // hardware serial for debug 
     Serial.println(F("Starting"));
+
+    // GPS
+    ss.begin(9600);         // software serial with GPS module
+    //pinMode(7, OUTPUT);     // pin 7 is connected to VCC for GPS - no longer true, output power with GPS connected was 2.3V while 3.3v expected, too much drain for Arduino pro micro
+    //digitalWrite(7, HIGH);   // power on GPS // not more
+    // TODO: add flightmode. Good test script seems available here:  https://ukhas.org.uk/guides:ublox6
 
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
@@ -251,13 +254,11 @@ void loop() {
     Serial.println(F("GPS..."));
     
     
-    hdopNumber = gps.hdop();
     gps.f_get_position(&flat, &flon, &age);
-        
     alt = gps.f_altitude();
+    hdopNumber = gps.hdop();
     gps.stats(&chars, &sentences, &failed);
 
-    
     Serial.print("  lat, lon, age, alt: ");
     Serial.print( flat );
     Serial.print(", ");
@@ -267,8 +268,8 @@ void loop() {
     Serial.print(", ");
     Serial.println( alt);
 
-  LatitudeBinary = ((flat + 90) / 180) * 16777215;
-  LongitudeBinary = ((flon + 180) / 360) * 16777215;
+    LatitudeBinary = ((flat + 90) / 180) * 16777215;
+    LongitudeBinary = ((flon + 180) / 360) * 16777215;
 
   
     Serial.print("  LatitudeBinary, LongitudeBinary: ");
@@ -276,20 +277,20 @@ void loop() {
     Serial.print(", ");
     Serial.println( LongitudeBinary, HEX );
 
-  mydata[0] = ( LatitudeBinary >> 16 ) & 0xFF;
-  mydata[1] = ( LatitudeBinary >> 8 ) & 0xFF;
-  mydata[2] = LatitudeBinary & 0xFF;
-
-  mydata[3] = ( LongitudeBinary >> 16 ) & 0xFF;
-  mydata[4] = ( LongitudeBinary >> 8 ) & 0xFF;
-  mydata[5] = LongitudeBinary & 0xFF;
-
-  altitudeGps = alt;
-  mydata[6] = ( altitudeGps >> 8 ) & 0xFF;
-  mydata[7] = altitudeGps & 0xFF;
-
-  hdopGps = hdopNumber*10;
-  mydata[8] = hdopGps & 0xFF;
+    mydata[0] = ( LatitudeBinary >> 16 ) & 0xFF;
+    mydata[1] = ( LatitudeBinary >> 8 ) & 0xFF;
+    mydata[2] = LatitudeBinary & 0xFF;
+  
+    mydata[3] = ( LongitudeBinary >> 16 ) & 0xFF;
+    mydata[4] = ( LongitudeBinary >> 8 ) & 0xFF;
+    mydata[5] = LongitudeBinary & 0xFF;
+  
+    altitudeGps = alt;
+    mydata[6] = ( altitudeGps >> 8 ) & 0xFF;
+    mydata[7] = altitudeGps & 0xFF;
+  
+    hdopGps = hdopNumber*10;
+    mydata[8] = hdopGps & 0xFF;
   
     
     os_runloop_once();
