@@ -57,13 +57,14 @@ void os_getDevKey (u1_t* buf) { }
 
 //uint8_t mydata[9];   // mydata[9] allows you to read and write to mydata[0] .. mydata[8]. Higher numbers work but are invalid.
 uint8_t mydata[20];  // a few bytes added to the memory buffer to play with
-//const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
-const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttn console
+const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
+//const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttn console
 
 static osjob_t sendjob;
 
 // Schedule TX event every this many seconds (might become longer due to duty cycle limitations).
-const unsigned TX_INTERVAL = 60;
+//const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
+const unsigned TX_INTERVAL = 30;    // actually an additional bit is added for the duration of the radio processing
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -298,14 +299,16 @@ void loop() {
     uint32_t sat;
     
     //delay(1000);    // do not delay - why delay and miss out some GPS data
-    led_on();    
+    //led_on();    
   
     Serial.println();
     Serial.println("Read GPS data... ");
     char c;
-    unsigned long start = millis();
+    unsigned long start;
+    start = millis();
+    led_on(); 
     do 
-    {
+    {   
       while (ss.available())
       {
         char c = ss.read();
@@ -315,8 +318,23 @@ void loop() {
         if (gps.encode(c)) // Did a new valid sentence come in?
           newData = true;
       }
-    } while (millis() - start < 3000);
-
+    } while (millis() - start < 1000);  
+     
+    start = millis();
+    led_off(); 
+    do 
+    {   
+      while (ss.available())
+      {
+        char c = ss.read();
+        #ifdef DEBUG
+        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        #endif
+        if (gps.encode(c)) // Did a new valid sentence come in?
+          newData = true;
+      }
+    } while (millis() - start < 3000);    
+    
     // retrieve values
     gps.f_get_position(&flat, &flon, &age);  // lat -90.0 .. 90.0 as a 4 byte float, lon -180 .. 180 as a 4 byte float, age in seconds as a 4 byte unsigned long
     gps.get_datetime(&date, &time);   // // time in hhmmsscc, date in ddmmyy
@@ -398,7 +416,7 @@ void loop() {
     Serial.print( altitudeGps, HEX );
     Serial.print(", ");
     Serial.println( accuracy, HEX );
-    Serial.println("expected   CA DA F. 83 5E 9. 0 .. .. " );
+    Serial.println("expected   CA DA F. 83 5E 9. 0 .. .. " );     
     Serial.print(  "mydata[] = ");
     Serial.print( mydata[0], HEX );
     Serial.print(" ");
@@ -431,7 +449,7 @@ void loop() {
     
     os_runloop_once();
     led_off();
-    delay(1000);
+    //delay(1000);
 }
 
 void led_on()
