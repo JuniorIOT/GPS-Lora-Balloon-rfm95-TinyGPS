@@ -268,8 +268,8 @@ void loop() {
     Serial.print(", ");
     Serial.println( alt);
 
-    LatitudeBinary = ((flat + 90) / 180) * 16777215;
-    LongitudeBinary = ((flon + 180) / 360) * 16777215;
+    LatitudeBinary = (((double)flat + 90) / 180) * 16777215;
+    LongitudeBinary = (((double)flon + 180) / 360) * 16777215;
 
   
     Serial.print("  LatitudeBinary, LongitudeBinary: ");
@@ -280,12 +280,20 @@ void loop() {
     mydata[0] = ( LatitudeBinary >> 16 ) & 0xFF;
     mydata[1] = ( LatitudeBinary >> 8 ) & 0xFF;
     mydata[2] = LatitudeBinary & 0xFF;
-  
+    Serial.print("  LatitudeBinary in mydata: ");
+    Serial.print( mydata[0], HEX);
+    Serial.print( mydata[1], HEX);
+    Serial.println( mydata[2], HEX);	  
+
     mydata[3] = ( LongitudeBinary >> 16 ) & 0xFF;
     mydata[4] = ( LongitudeBinary >> 8 ) & 0xFF;
     mydata[5] = LongitudeBinary & 0xFF;
+    Serial.print("  LongitudeBinary in mydata: ");
+    Serial.print( mydata[3], HEX);
+    Serial.print( mydata[4], HEX);
+    Serial.println( mydata[5], HEX);	  
   
-    altitudeGps = alt;
+    altitudeGps = (double)alt;
     mydata[6] = ( altitudeGps >> 8 ) & 0xFF;
     mydata[7] = altitudeGps & 0xFF;
   
