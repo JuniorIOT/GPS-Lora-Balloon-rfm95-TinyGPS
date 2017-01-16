@@ -298,8 +298,7 @@ void loop() {
     unsigned long date, time;
     uint32_t sat;  
   
-    Serial.println();
-    Serial.println("Read GPS data... ");
+    Serial.print("Read GPS data... ");
     char c;
     unsigned long start = millis();
     do 
@@ -345,7 +344,6 @@ void loop() {
     mydata[10] = 42;  // the * character
     
     //show me something
-    Serial.println();
     Serial.print("Interpreted GPS data: ");
     //    long l_lat, l_lon;
     //    gps.get_position(&l_lat, &l_lon, &age);
