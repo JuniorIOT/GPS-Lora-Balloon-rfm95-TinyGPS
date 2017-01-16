@@ -34,7 +34,7 @@
  // TODO: add flightmode. Good test script seems available here:  https://ukhas.org.uk/guides:ublox6
 
 
-#define DEBUG 
+#define DEBU  
 
 #include <lmic.h>
 #include <hal/hal.h>
@@ -63,8 +63,8 @@ const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker ser
 static osjob_t sendjob;
 
 // Schedule TX event every this many seconds (might become longer due to duty cycle limitations).
-//const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
-const unsigned TX_INTERVAL = 30;    // actually an additional bit is added for the duration of the radio processing
+ const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
+// const unsigned TX_INTERVAL = 30;    // actually an additional bit is added for the duration of the radio processing
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -155,7 +155,7 @@ void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blo
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        
+        Serial.println("expected   CA DA F. 83 5E 9. 0 .. .. " );     
         Serial.print("  mydata[] = ");
         Serial.print( mydata[0], HEX );
         Serial.print(" ");
@@ -296,46 +296,26 @@ void loop() {
     float flat, flon, alt;
     unsigned long age;  // 1000ths second
     unsigned long date, time;
-    uint32_t sat;
-    
-    //delay(1000);    // do not delay - why delay and miss out some GPS data
-    //led_on();    
+    uint32_t sat;  
   
     Serial.println();
     Serial.println("Read GPS data... ");
     char c;
-    unsigned long start;
-    start = millis();
-    led_on(); 
+    unsigned long start = millis();
     do 
     {   
       while (ss.available())
       {
         char c = ss.read();
         #ifdef DEBUG
-        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         #endif
         if (gps.encode(c)) // Did a new valid sentence come in?
           newData = true;
       }
-    } while (millis() - start < 1000);  
+    } while (millis() - start < 6000);  
      
-    start = millis();
-    led_off(); 
-    do 
-    {   
-      while (ss.available())
-      {
-        char c = ss.read();
-        #ifdef DEBUG
-        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
-        #endif
-        if (gps.encode(c)) // Did a new valid sentence come in?
-          newData = true;
-      }
-    } while (millis() - start < 3000);    
-    
-    // retrieve values
+    // retrieve values from GPS library
     gps.f_get_position(&flat, &flon, &age);  // lat -90.0 .. 90.0 as a 4 byte float, lon -180 .. 180 as a 4 byte float, age in seconds as a 4 byte unsigned long
     gps.get_datetime(&date, &time);   // // time in hhmmsscc, date in ddmmyy
     alt = gps.f_altitude();    // signed
@@ -364,11 +344,9 @@ void loop() {
     mydata[9] = 42;  // the * character as dummy
     mydata[10] = 42;  // the * character
     
-    #ifdef DEBUG
     //show me something
     Serial.println();
-    Serial.println();
-    Serial.println("Interpreted GPS data:");
+    Serial.print("Interpreted GPS data: ");
     //    long l_lat, l_lon;
     //    gps.get_position(&l_lat, &l_lon, &age);
     //    Serial.print("ALternative reading long LAT, LON=");
@@ -379,8 +357,8 @@ void loop() {
     Serial.print("date, time = ");
     Serial.print( date);   
     Serial.print(", ");
-    Serial.println(time);   
-    Serial.print("LAT, LON=");
+    Serial.print(time);   
+    Serial.print("  LAT, LON=");
     Serial.print( flat, 6);   
     Serial.print(", ");
     Serial.print(flon, 6); // 52.632656, 4.738389
@@ -401,6 +379,8 @@ void loop() {
       Serial.print(" (Age is invalid. No GPS fix detected)");
     Serial.print(" CSUM ERR=");
     Serial.println(failed);
+    
+    #ifdef DEBUG
     if (chars == 0)
       Serial.println("** No characters received from GPS: check wiring **");
     else if (age > 5000)
