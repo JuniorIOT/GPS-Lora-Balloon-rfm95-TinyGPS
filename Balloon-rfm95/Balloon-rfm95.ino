@@ -457,6 +457,7 @@ void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNu
   uint32_t LatitudeBinary = ((flat + 90) / 180) * 16777215;
   uint32_t LongitudeBinary = ((flon + 180) / 360) * 16777215;
   uint16_t altitudeGps = alt;         // altitudeGps in meters, alt from tinyGPS is float in meters
+  if (alt<0) altitudeGps=0;   // unsigned int wil not allow negative values and warps them to huge number, needs to be zero'ed
   // uint8_t accuracy = hdopNumber*10;   // needs to be /10 instead of *10 as per example JP
   uint8_t accuracy = hdopNumber/10;   // from TinyGPS horizontal dilution of precision in 100ths, TinyGPSplus seems the same in 100ths as per MNEMA string
   
@@ -468,7 +469,7 @@ void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNu
   mydata[4] = ( LongitudeBinary >> 8 ) & 0xFF;
   mydata[5] = LongitudeBinary & 0xFF;
 
-  // altitudeGps in meters
+  // altitudeGps in meters into unsigned int
   mydata[6] = ( altitudeGps >> 8 ) & 0xFF;
   mydata[7] = altitudeGps & 0xFF;
 
