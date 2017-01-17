@@ -32,9 +32,13 @@
 
  // TODO: investigate OTAA, good description here: Moteino, LMIC and OTAA Walkthrough https://github.com/lukastheiler/ttn_moteino
  // TODO: add flightmode. Good test script seems available here:  https://ukhas.org.uk/guides:ublox6
+// TODO: Keep last known good GPS data, ignore invalid GPS data, use coordinates 0,0 for invalid/no GPS
+// TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
+// TODO: investigate why/if hdop may be inaccurate, or more likely I have an error in interpretation and it needs to be scaled down I will check in our next iteration. I hope this does not affect the map.
 
 
-#define DEBU  
+#define DEB //UG     // if DEBUG is defined, some code is added to display some basic debug info
+#define DE //BUG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
 
 #include <lmic.h>
 #include <hal/hal.h>
@@ -56,7 +60,7 @@ void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
 //uint8_t mydata[9];   // mydata[9] allows you to read and write to mydata[0] .. mydata[8]. Higher numbers work but are invalid.
-uint8_t mydata[20];  // a few bytes added to the memory buffer to play with
+uint8_t mydata[14];  // a few bytes added to the memory buffer to play with
 const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
 //const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttn console
 
@@ -149,14 +153,17 @@ void onEvent (ev_t ev) {
 // do_send call is scheduled in event handler
 void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
     
-    Serial.println("\ndo_send was called **********************************");
+    Serial.println("\ndo_send was called.");
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        Serial.println("  expected   CA DA F. 83 5E 9. 0 .. .. " );     
-        Serial.print("  mydata[] = ");
+
+        #ifdef DEBUG
+        Serial.println("  expected   CA DA F. 83 5E 9. 0 .. .. " );   
+        #endif  
+        Serial.print(" mydata[] = ");
         Serial.print( mydata[0], HEX );
         Serial.print(" ");
         Serial.print( mydata[1], HEX );
@@ -196,27 +203,8 @@ void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blo
     // Next TX is scheduled after TX_COMPLETE event.
 }
 
-void setup() {
-    Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
-    
-    Serial.println();
-    Serial.println();
-    Serial.println("Starting Balloon RFM95");
-    Serial.print("Simple TinyGPS library v. "); Serial.println(TinyGPS::library_version());
-    Serial.println("by Mikal Hart");
-    Serial.println();
-  
-    // GPS serial
-    ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
-                            // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
-
-    #ifdef VCC_ENABLE
-      // For Pinoccio Scout boards
-      pinMode(VCC_ENABLE, OUTPUT);
-      digitalWrite(VCC_ENABLE, HIGH);
-      delay(1000);
-    #endif
-
+void lmic_init()
+{
     // LMIC init
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
@@ -277,28 +265,44 @@ void setup() {
 
     // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
     LMIC_setDrTxpow(DR_SF7,14);
+}
 
+void setup() {
+    Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
+    pinMode(13, OUTPUT);  //blink
+    
+    // load the send buffer with dummy location 0,0 is recognized and ignored by TTN Mapper
+    put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
+    
+    Serial.println();
+    Serial.println();
+    Serial.println("Starting Balloon RFM95");
+    Serial.print("Simple TinyGPS library v. "); Serial.println(TinyGPS::library_version());
+    Serial.println("by Mikal Hart");
+    Serial.println();
+  
+    // GPS serial
+    ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
+                            // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
+
+    #ifdef VCC_ENABLE
+      // For Pinoccio Scout boards
+      pinMode(VCC_ENABLE, OUTPUT);
+      digitalWrite(VCC_ENABLE, HIGH);
+      delay(1000);
+    #endif
+
+    lmic_init();  // code moved to sub as per example JP
+    
     // Start job
     do_send(&sendjob);
 }
 
+bool blink_on = false;
 void loop() {
-    bool newData = false;
-    unsigned long chars = 0;
-    unsigned short sentences = 0, failed = 0;
-   // static const double LONDON_LAT = 51.508131, LONDON_LON = -0.128002;
     
-    uint32_t LatitudeBinary, LongitudeBinary;
-    uint16_t altitudeGps;
-    uint8_t accuracy; 
-    int hdopNumber;  //100ths meter
-    
-    float flat, flon, alt;
-    unsigned long age;  // 1000ths second
-    unsigned long date, time;
-    uint32_t sat;  
-  
-    Serial.print("Read GPS data... ");
+    // process the serial feed from GPS module
+    Serial.println("Read GPS... ");
     char c;
     unsigned long start = millis();
     do 
@@ -306,128 +310,27 @@ void loop() {
       while (ss.available())
       {
         char c = ss.read();
-        #ifdef DEBUG
+        #ifdef DEBUG_XL
         Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         #endif
+        
         if (gps.encode(c)) // Did a new valid sentence come in?
-          newData = true;
+        {
+          // process the new values and store into send buffer if valid
+          process_gps_values();
+          
+          // toggle blink led
+          blink_on = !blink_on;
+          if (blink_on) led_on();
+          else led_off();
+          
+        }
       }
-    } while (millis() - start < 6000);  
+    } while (millis() - start < 6000); 
+    
+    //process_gps_values(); 
      
-    // retrieve values from GPS library
-    gps.f_get_position(&flat, &flon, &age);  // lat -90.0 .. 90.0 as a 4 byte float, lon -180 .. 180 as a 4 byte float, age in seconds as a 4 byte unsigned long
-    gps.get_datetime(&date, &time);   // // time in hhmmsscc, date in ddmmyy
-    alt = gps.f_altitude();    // signed
-    hdopNumber = gps.hdop();   //
-    gps.stats(&chars, &sentences, &failed);
-    sat = gps.satellites();
-    
-    LatitudeBinary = ((flat + 90) / 180) * 16777215;
-    LongitudeBinary = ((flon + 180) / 360) * 16777215;
-    
-    mydata[0] = ( LatitudeBinary >> 16 ) & 0xFF;
-    mydata[1] = ( LatitudeBinary >> 8 ) & 0xFF;
-    mydata[2] = LatitudeBinary & 0xFF;
-  
-    mydata[3] = ( LongitudeBinary >> 16 ) & 0xFF;
-    mydata[4] = ( LongitudeBinary >> 8 ) & 0xFF;
-    mydata[5] = LongitudeBinary & 0xFF;
-  
-    altitudeGps = alt;
-    mydata[6] = ( altitudeGps >> 8 ) & 0xFF;
-    mydata[7] = altitudeGps & 0xFF;
-  
-    accuracy = hdopNumber*10;
-    mydata[8] = accuracy & 0xFF;
-    
-    mydata[9] = 42;  // the * character as dummy
-    mydata[10] = 42;  // the * character
-    
-    //show me something
-    Serial.print("Interpreted GPS data: ");
-    //    long l_lat, l_lon;
-    //    gps.get_position(&l_lat, &l_lon, &age);
-    //    Serial.print("ALternative reading long LAT, LON=");
-    //    Serial.print(l_lat, 6);         
-    //    Serial.print(", ");
-    //    Serial.println(l_lon, 6);         // 51 20033410, 2 45320553 hey --- different from my current pos
-
-    Serial.print("date, time = ");
-    Serial.print( date);   
-    Serial.print(", ");
-    Serial.print(time);   
-    Serial.print("  LAT, LON=");
-    Serial.print( flat, 6);   
-    Serial.print(", ");
-    Serial.print(flon, 6); // 52.632656, 4.738389
-    Serial.print(" hdopNumber=");
-    Serial.print( hdopNumber);
-    Serial.print(" alt=");
-    Serial.print( alt );
-    Serial.print(" SAT=");
-    Serial.print( sat);
-    
-    Serial.print(" CHARS=");
-    Serial.print(chars);
-    Serial.print(" SENTENCES=");
-    Serial.print(sentences);
-    Serial.print(" AGE=");
-    Serial.print(age);
-    if (age == TinyGPS::GPS_INVALID_AGE)
-      Serial.print(" (Age is invalid. No GPS fix detected)");
-    Serial.print(" CSUM ERR=");
-    Serial.println(failed);
-    
-    #ifdef DEBUG
-    if (chars == 0)
-      Serial.println("** No characters received from GPS: check wiring **");
-    else if (age > 5000)
-      Serial.println("Warning: possible stale GPS data (age over 5 seconds)");
-    else
-      Serial.println("GPS Data is fresh (age less than 5 seconds)");
-  
-    Serial.print("For TTN message LatitudeBinary, LongitudeBinary, altitudeGps, accuracy: ");
-    Serial.print( LatitudeBinary, HEX);
-    Serial.print(", ");
-    Serial.print( LongitudeBinary, HEX );
-    Serial.print(", ");
-    Serial.print( altitudeGps, HEX );
-    Serial.print(", ");
-    Serial.println( accuracy, HEX );
-    Serial.println("expected   CA DA F. 83 5E 9. 0 .. .. " );     
-    Serial.print(  "mydata[] = ");
-    Serial.print( mydata[0], HEX );
-    Serial.print(" ");
-    Serial.print( mydata[1], HEX );
-    Serial.print(" ");
-    Serial.print( mydata[2], HEX );
-    Serial.print(" ");
-    Serial.print( mydata[3], HEX );
-    Serial.print(" ");
-    Serial.print( mydata[4], HEX );
-    Serial.print(" ");
-    Serial.print( mydata[5], HEX );
-    Serial.print(" ");
-    Serial.print( mydata[6], HEX );
-    Serial.print(" ");
-    Serial.print( mydata[7], HEX );
-    Serial.print(" ");
-    Serial.print( mydata[8], HEX );
-    Serial.print(" / ");
-    Serial.print( mydata[9], HEX );
-    Serial.print(" ");
-    Serial.println( mydata[10], HEX );
-    // if no fix was found:
-    //    LAT, LON=1000.000000, 1000.000000 hdopNumber=-1 alt=1000000.00 SAT=255 CHARS=7830 SENTENCES=0 AGE=4294967295 (Age is invalid. No GPS fix detected) CSUM ERR=2
-    //    Warning: possible stale GPS data (age over 5 seconds)
-    //    For TTN message LatitudeBinary, LongitudeBinary, altitudeGps, accuracy: 60E38D8, 3471C6C, 4240, F6
-    //    mydata[] = E 38 D8 47 1C 6C 42 40 F6
-
-    #endif
-    
     os_runloop_once();
-    led_off();
-    //delay(1000);
 }
 
 void led_on()
@@ -441,6 +344,143 @@ void led_off()
 }
 
 
+void process_gps_values()
+{ 
+  // retrieve some usefull values from GPS library
+  float flat, flon, alt;
+  unsigned long age; 
+  int hdopNumber;  
+  
+  gps.f_get_position(&flat, &flon, &age);  // lat -90.0 .. 90.0 as a 4 byte float, lon -180 .. 180 as a 4 byte float, age in 1/1000 seconds as a 4 byte unsigned long
+  alt = gps.f_altitude();    // signed float altitude in meters
+  hdopNumber = gps.hdop();   // int 100ths of a meter
+
+  // check if possibly invalid
+  bool GPS_values_are_valid = true;
+  if (flat == TinyGPS::GPS_INVALID_F_ANGLE)    GPS_values_are_valid = false;
+  if (flon == TinyGPS::GPS_INVALID_F_ANGLE)    GPS_values_are_valid = false;
+  if (hdopNumber == TinyGPS::GPS_INVALID_HDOP) GPS_values_are_valid = false;
+  if (age == TinyGPS::GPS_INVALID_AGE)         GPS_values_are_valid = false;
+  
+  if (alt == TinyGPS::GPS_INVALID_F_ALTITUDE)  GPS_values_are_valid = false;   // if alt, hdop remain giving errors, possibly the GPS character read misses every start few characters of every feed. Solution: make the code lighter so it returns quicker to character read. Or process a bit of buffer while doing other actions, see TinyGPS example.
+
+  // if valid, put into buffer
+  if (GPS_values_are_valid) put_gpsvalues_into_sendbuffer( flat, flon, alt, hdopNumber);
+    // after init, sendbuffer holds 0,0 lovation; after first fix it will retain the last valid location
+  
+  //show me something
+  #ifdef DEBUG
+//  unsigned long chars = 0;
+  unsigned short sentences = 0, failed = 0;
+  uint32_t sat;  
+  
+//  gps.stats(&chars, &sentences, &failed);
+//  sat = gps.satellites();
+  
+  Serial.print("Data: ");
+  if (GPS_values_are_valid) Serial.print("(valid) ");
+  if (!GPS_values_are_valid) Serial.print("(** INVALID");
+  if (flat == TinyGPS::GPS_INVALID_F_ANGLE)    {Serial.print(" lat="); Serial.print(flat);}
+  if (flon == TinyGPS::GPS_INVALID_F_ANGLE)    {Serial.print(" lon="); Serial.print(flon);}
+  if (hdopNumber == TinyGPS::GPS_INVALID_HDOP) {Serial.print(" hdop="); Serial.print(hdopNumber);}
+  if (age == TinyGPS::GPS_INVALID_AGE)         {Serial.print(" age="); Serial.print(age);}
+  if (alt == TinyGPS::GPS_INVALID_F_ALTITUDE)  {Serial.print(" alt="); Serial.print(alt);}
+  if (!GPS_values_are_valid) Serial.print(" **) ");
+  Serial.print("  LAT, LON=");
+  Serial.print( flat, 6);   
+  Serial.print(", ");
+  Serial.print(flon, 6); // 52.632656, 4.738389
+  Serial.print(" hdop=");
+  Serial.print( hdopNumber);
+  Serial.print(" alt=");
+  Serial.print( alt );
+  Serial.print(" SAT=");
+  Serial.print( sat);
+  
+//  Serial.print(" CHARS=");
+//  Serial.print(chars);
+  Serial.print(" SENT=");
+  Serial.print(sentences);
+  Serial.print(" AGE=");
+  Serial.print(age);
+  Serial.print(" ERR=");
+  Serial.println(failed);
+  #endif
+  
+  #ifdef DEBUG_XL
+  if (chars == 0)
+    Serial.println("** No characters from GPS: check wiring **");
+  else if (age > 5000)
+    Serial.println("Warning: possible stale GPS data (age over 5 seconds)");
+  else
+    Serial.println("GPS Data is fresh (age less than 5 seconds)");
+
+  Serial.print("For TTN message LatitudeBinary, LongitudeBinary, altitudeGps, accuracy: ");
+//    Serial.print( LatitudeBinary, HEX);
+//    Serial.print(", ");
+//    Serial.print( LongitudeBinary, HEX );
+//    Serial.print(", ");
+//    Serial.print( altitudeGps, HEX );
+//    Serial.print(", ");
+//    Serial.println( accuracy, HEX );
+  Serial.println("expected   CA DA F. 83 5E 9. 0 .. .. " );     
+  Serial.print(  "mydata[] = ");
+  Serial.print( mydata[0], HEX );
+  Serial.print(" ");
+  Serial.print( mydata[1], HEX );
+  Serial.print(" ");
+  Serial.print( mydata[2], HEX );
+  Serial.print(" ");
+  Serial.print( mydata[3], HEX );
+  Serial.print(" ");
+  Serial.print( mydata[4], HEX );
+  Serial.print(" ");
+  Serial.print( mydata[5], HEX );
+  Serial.print(" ");
+  Serial.print( mydata[6], HEX );
+  Serial.print(" ");
+  Serial.print( mydata[7], HEX );
+  Serial.print(" ");
+  Serial.print( mydata[8], HEX );
+  Serial.print(" / ");
+  Serial.print( mydata[9], HEX );
+  Serial.print(" ");
+  Serial.println( mydata[10], HEX );
+  #endif    
+}
+
+
+
+void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNumber)
+{  
+  
+  uint32_t LatitudeBinary = ((flat + 90) / 180) * 16777215;
+  uint32_t LongitudeBinary = ((flon + 180) / 360) * 16777215;
+  uint16_t altitudeGps = alt;         // altitudeGps in meters, alt from tinyGPS is float in meters
+  // uint8_t accuracy = hdopNumber*10;   // needs to be /10 instead of *10 as per example JP
+  uint8_t accuracy = hdopNumber/10;   // from TinyGPS horizontal dilution of precision in 100ths, TinyGPSplus seems the same in 100ths as per MNEMA string
+  
+  mydata[0] = ( LatitudeBinary >> 16 ) & 0xFF;
+  mydata[1] = ( LatitudeBinary >> 8 ) & 0xFF;
+  mydata[2] = LatitudeBinary & 0xFF;
+
+  mydata[3] = ( LongitudeBinary >> 16 ) & 0xFF;
+  mydata[4] = ( LongitudeBinary >> 8 ) & 0xFF;
+  mydata[5] = LongitudeBinary & 0xFF;
+
+  // altitudeGps in meters
+  mydata[6] = ( altitudeGps >> 8 ) & 0xFF;
+  mydata[7] = altitudeGps & 0xFF;
+
+  // hdop in tenths of meter
+  mydata[8] = accuracy & 0xFF;
+  
+  mydata[9] = 0;  // fill up next bytes in buffer, just for play. As-if null terminated string.
+  mydata[10] = 0xFF;  // dummy filler byte
+}
+//
+// SOME EXPLANATION ON THE NUMBERS
+//
 //     The example SodaqBallonTestPaulB by Paul was suggested to provide the valid binary format for TTNmapper.org 
 //     in this example, the Sodaq_UBlox_GPS library is used
 //     as we experience difficulty in formatting the correct values into our message, let's analyze what is done in detail in the example
