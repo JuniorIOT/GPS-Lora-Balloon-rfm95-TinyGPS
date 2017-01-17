@@ -63,8 +63,8 @@ const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker ser
 static osjob_t sendjob;
 
 // Schedule TX event every this many seconds (might become longer due to duty cycle limitations).
- const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
-// const unsigned TX_INTERVAL = 30;    // actually an additional bit is added for the duration of the radio processing
+// const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
+ const unsigned TX_INTERVAL = 40;    // actually an additional bit is added for the duration of the radio processing
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -155,7 +155,7 @@ void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blo
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        Serial.println("expected   CA DA F. 83 5E 9. 0 .. .. " );     
+        Serial.println("  expected   CA DA F. 83 5E 9. 0 .. .. " );     
         Serial.print("  mydata[] = ");
         Serial.print( mydata[0], HEX );
         Serial.print(" ");
