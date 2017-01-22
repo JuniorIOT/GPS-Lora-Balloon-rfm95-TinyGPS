@@ -1,10 +1,10 @@
 # GPS-Lora-Balloon-rfm95-TinyGPS <BR/>
  <BR/>
-Libraries required: <BR/>
+##Libraries required: <BR/>
    TinyGPS       https://github.com/mikalhart/TinyGPS <BR/>
    arduino-lmic  https://github.com/matthijskooijman/arduino-lmic <BR/>
  <BR/>
-Lora location transmittor with TinyGPS and rfm95 <BR/>
+##Lora location transmittor with TinyGPS and rfm95 <BR/>
   adjustment for fablab Kaasfabriek Junior IoT Baloon Challenge february 2017 <BR/>
              met leerling teams bij fablab de Kaasfabriek in Alkmaar <BR/>
                      deze software op het internet is natuurlijk geheim... <BR/>
@@ -15,13 +15,13 @@ Lora location transmittor with TinyGPS and rfm95 <BR/>
   Educatie kletser: Marco --> marco@kaasfabriek.nl <BR/>
   Regie en inspiratie: Kaasfabriek --> info at kaasfabriek punt nl <BR/>
  <BR/>
-Important: <BR/>
+##Important: <BR/>
 how to build your first node, practical soldering tips in nice pictures,  <BR/>
 https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself <BR/>
  --> you will need to use our pin mapping instead <BR/>
  <BR/>
----------------------------------------------------------------------------- <BR/>
-Suggested pin mapping:                                                       <BR/>
+```---------------------------------------------------------------------------- <BR/>
+##Suggested pin mapping:                                                       <BR/>
  this new mapping puts the boards next to each other as shown in schema below, <BR/>
          can be folded into compact stack with the 868 antenna outside the pile <BR/>
 ----------------------------------------------------------------------------- <BR/>
@@ -65,3 +65,4 @@ Suggested pin mapping:                                                       <BR
  5 volt from usb -> step down to 3.3 volt -> JST female connector          <BR/>
  9 volt or 12 volt battery -> step down to 3.3 v -> JST female connector     <BR/>
 ----------------------------------------------------------------------------- <BR/>
+```
