@@ -37,7 +37,7 @@
 // TODO: investigate why/if hdop may be inaccurate, or more likely I have an error in interpretation and it needs to be scaled down I will check in our next iteration. I hope this does not affect the map.
 
 
-#define DEB //UG     // if DEBUG is defined, some code is added to display some basic debug info
+#define DEBUG     // if DEBUG is defined, some code is added to display some basic debug info
 #define DE //BUG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
 
 #include <lmic.h>
@@ -69,6 +69,7 @@ static osjob_t sendjob;
 // Schedule TX event every this many seconds (might become longer due to duty cycle limitations).
 // const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
  const unsigned TX_INTERVAL = 40;    // actually an additional bit is added for the duration of the radio processing
+
 
 // Pin mapping, adjusted to get wires to same side as NISO & NOSI
 const lmic_pinmap lmic_pins = {
@@ -161,9 +162,10 @@ void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blo
         // Prepare upstream data transmission at the next possible time.
 
         #ifdef DEBUG
-        Serial.println("  expected   CA DA F. 83 5E 9. 0 .. .. " );   
+        Serial.println("  expected   CA DA F? 83 5E 9? 0 ?? ?? " );  
+        Serial.println("    dummy   7F FF FF 7F FF FF 0 0 0 " );    
         #endif  
-        Serial.print(" mydata[] = ");
+        Serial.print(" mydata[] = [");
         Serial.print( mydata[0], HEX );
         Serial.print(" ");
         Serial.print( mydata[1], HEX );
@@ -177,14 +179,15 @@ void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blo
         Serial.print( mydata[5], HEX );
         Serial.print(" ");
         Serial.print( mydata[6], HEX );
-        Serial.print(" ");
-        Serial.print( mydata[7], HEX );
-        Serial.print(" ");
-        Serial.print( mydata[8], HEX );
-        Serial.print(" / ");
-        Serial.print( mydata[9], HEX );
-        Serial.print(" ");
-        Serial.println( mydata[10], HEX );
+        if (message_size>6) Serial.print(" ");
+        if (message_size>6) Serial.print( mydata[7], HEX );
+        if (message_size>7) Serial.print(" ");
+        if (message_size>7) Serial.print( mydata[8], HEX );
+        if (message_size>8) Serial.print(" / ");
+        if (message_size>8) Serial.print( mydata[9], HEX );
+        if (message_size>9) Serial.print(" ");
+        if (message_size>9) Serial.print( mydata[10], HEX );
+        Serial.println("]");
     
         // LMIC_setTxData2(1, mydata, sizeof(mydata), 0);  //Dennis adjusted sizeof(mydata)-1 to sizeof(mydata); that is common with null terminated string as the terminating char(0) is not added to the message
         LMIC_setTxData2(1, mydata, message_size, 0);   
@@ -260,9 +263,8 @@ void lmic_init()
 
 void setup() {
     Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
-    pinMode(13, OUTPUT);  //blink
     
-    // load the send buffer with dummy location 0,0 is recognized and ignored by TTN Mapper
+    // load the send buffer with dummy location 0,0. This location 0,0 is recognized as dummy by TTN Mapper and will be ignored
     put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
     
     Serial.println();
@@ -306,16 +308,7 @@ void loop() {
         #endif
         
         if (gps.encode(c)) // Did a new valid sentence come in?
-        {
-          // process the new values and store into send buffer if valid
-          process_gps_values();
-          
-          // toggle blink led
-          blink_on = !blink_on;
-          if (blink_on) led_on();
-          else led_off();
-          
-        }
+            process_gps_values();
       }
     } while (millis() - start < 6000); 
     
@@ -323,16 +316,16 @@ void loop() {
      
     os_runloop_once();
 }
-
-void led_on()
-{
-  digitalWrite(13, 1);
-}
-
-void led_off()
-{
-  digitalWrite(13, 0);
-}
+//
+//void led_on()  // we are not using the blink as also the lora is connected to port 13
+//{
+//  digitalWrite(13, 1);
+//}
+//
+//void led_off()
+//{
+//  digitalWrite(13, 0);
+//}
 
 
 void process_gps_values()
@@ -361,12 +354,12 @@ void process_gps_values()
   
   //show me something
   #ifdef DEBUG
-//  unsigned long chars = 0;
-  unsigned short sentences = 0, failed = 0;
-  uint32_t sat;  
-  
-//  gps.stats(&chars, &sentences, &failed);
-//  sat = gps.satellites();
+  // keep some values out as seems to take performance and/or make for code to miss GPS sentences
+  //unsigned long chars = 0;
+  //unsigned short sentences = 0, failed = 0;
+  //uint32_t sat; 
+  //gps.stats(&chars, &sentences, &failed);
+  //sat = gps.satellites();
   
   Serial.print("Data: ");
   if (GPS_values_are_valid) Serial.print("(valid) ");
@@ -385,17 +378,18 @@ void process_gps_values()
   Serial.print( hdopNumber);
   Serial.print(" alt=");
   Serial.print( alt );
-  Serial.print(" SAT=");
-  Serial.print( sat);
-  
-//  Serial.print(" CHARS=");
-//  Serial.print(chars);
-  Serial.print(" SENT=");
-  Serial.print(sentences);
   Serial.print(" AGE=");
   Serial.print(age);
-  Serial.print(" ERR=");
-  Serial.println(failed);
+  //Serial.print(" SAT=");
+  //Serial.print( sat);
+  
+  //  Serial.print(" CHARS=");
+  //  Serial.print(chars);
+  //Serial.print(" SENT=");
+  //Serial.print(sentences);
+  //Serial.print(" ERR=");
+  //Serial.print(failed);
+  Serial.println("");
   #endif
   
   #ifdef DEBUG_XL
@@ -415,6 +409,7 @@ void process_gps_values()
 //    Serial.print(", ");
 //    Serial.println( accuracy, HEX );
   Serial.println("expected   CA DA F. 83 5E 9. 0 .. .. " );     
+  Serial.println("    dummy   7F FF FF 7F FF FF 0 0 0 " );    
   Serial.print(  "mydata[] = ");
   Serial.print( mydata[0], HEX );
   Serial.print(" ");
@@ -429,14 +424,15 @@ void process_gps_values()
   Serial.print( mydata[5], HEX );
   Serial.print(" ");
   Serial.print( mydata[6], HEX );
-  Serial.print(" ");
-  Serial.print( mydata[7], HEX );
-  Serial.print(" ");
-  Serial.print( mydata[8], HEX );
-  Serial.print(" / ");
-  Serial.print( mydata[9], HEX );
-  Serial.print(" ");
-  Serial.println( mydata[10], HEX );
+  if (message_size>6) Serial.print(" ");
+  if (message_size>6) Serial.print( mydata[7], HEX );
+  if (message_size>7) Serial.print(" ");
+  if (message_size>7) Serial.print( mydata[8], HEX );
+  if (message_size>8) Serial.print(" / ");
+  if (message_size>8) Serial.print( mydata[9], HEX );
+  if (message_size>9) Serial.print(" ");
+  if (message_size>9) Serial.print( mydata[10], HEX );
+  Serial.println("]");
   #endif    
 }
 
