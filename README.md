@@ -18,9 +18,9 @@ See https://www.thethingsnetwork.org/labs/story/junior-iot-ballonnen-challenge
 - Regie en inspiratie: Kaasfabriek --> info at kaasfabriek punt nl
 
 ##Important
-how to build your first node, practical soldering tips in nice pictures,  <BR/>
-https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself <BR/>
- --> you will need to use our pin mapping instead <BR/>
+how to build your first node, practical soldering tips in nice pictures, 
+https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself 
+ --> you will need to use our pin mapping instead 
 
 ##Pin mapping
     ---------------------------------------------------------------------------- 
@@ -37,11 +37,11 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
                                │  │  x  │      ARDUINO pro mini (2 euro)      
       GPS unit            ╔═╬══╬══╬══╬══╬══╬═╗ 8Mhz 32kb 3.3 volt             
       NEO-6M              ║ G TX RX VCC GND B║                                   
-      3.3 volt            ║                  ║      * ports marked are non-mappable 
-      (10 euro)           ╬ TXD          RAW ╬x         others can be re-configured 
-     ╔═══════════╗        ╬ RXD          GND ╬─gnd                                  
-     ║           ║        ╬ RST          RST ╬x        x marked remains unconnected 
-     ║     (PPS) ╬x       ╬ GND          VCC ╬─3.3v                                
+      3.3 volt            ║                  ║      * ports marked are non-mappable
+      (10 euro)           ╬ TXD          RAW ╬x         others can be re-configured
+     ╔═══════════╗        ╬ RXD          GND ╬─gnd                                 
+     ║           ║        ╬ RST          RST ╬x        x marked remains unconnected
+     ║     (PPS) ╬x       ╬ GND          VCC ╬─3.3v                             
      ║       RXD ╬─────tx─╬ 2             A3 ╬────────────────────────────────┐
      ║  ro)  TXD ╬─────rx─╬ 3             A2 ╬──────────────────────────────┐ │ 
      ║       GND ╬─gnd    ╬ 4             A1 ╬────────────────────────────┐ │ │ 
@@ -56,13 +56,13 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
                                                     gnd╬ GND       ANT ╬──┐   
          power to    power to    power to              ╚═══════════════╝  │   
           GPS       arduino     RFM                     RFM95             │   
-           | |       | |       | |                      3.3 volt     /////////// 
-           └─|───────┴─|───────┴─|───────┐              (10 euro)    / helical / 
-             └─────────┴─────────┴─────┐ │                           / 868Mhz  / 
-                                       - +                           / antenna / 
-                                JST male connector                   /////////// 
-     power supply suggestions:                                                       
-      2x AA battery -> JST female connector                                  
+           | |       | |       | |                      3.3 volt         ///// 
+           └─|───────┴─|───────┴─|───────┐              (10 euro)        ///// 
+             └─────────┴─────────┴─────┐ │                               ///// 
+                                       - +                       helical ///// 
+                                JST male connector                868Mhz ///// 
+     power supply suggestions:                                   antenna /////
+      2x AA battery -> JST female connector                              /////
      1S lipo 3.7v -> lipo protect -> JST female connector                     
      2s lipo 7.4V -> lipo protect -> step down to 3.3 v -> JST female connector 
      5 volt from usb -> step down to 3.3 volt -> JST female connector          
