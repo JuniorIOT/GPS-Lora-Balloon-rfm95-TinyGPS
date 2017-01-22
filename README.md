@@ -28,11 +28,10 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
     this new mapping puts the boards next to each other as shown in schema below,
           can be folded into compact stack with the 868 antenna outside the pile 
     -----------------------------------------------------------------------------
-                         ║                 ║ USB to serial programmer        
-                         ║3.3 TX RX GND 5V ║                              
-                         ╚══╬══╬══╬══╬══╬══╝ while programming, power comes
-                            x  │  │  │  x       from external supply to get
-                                  │  │  │               enough current for GPS
+                            ║                 ║ USB to serial programmer        
+                            ║3.3 TX RX GND 5V ║ while programming, power comes
+                            ╚══╬══╬══╬══╬══╬══╝ from external supply to get
+                               x  │  │  │  x    enough current for GPS
                                ┌──│──┘  │                                     
                                │  │  x  │      ARDUINO pro mini (2 euro)      
       GPS unit            ╔═╬══╬══╬══╬══╬══╬═╗ 8Mhz 32kb 3.3 volt             
