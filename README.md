@@ -1,67 +1,67 @@
-# GPS-Lora-Balloon-rfm95-TinyGPS
-
-Libraries required:
-   TinyGPS       https://github.com/mikalhart/TinyGPS
-   arduino-lmic  https://github.com/matthijskooijman/arduino-lmic
-
-Lora location transmittor with TinyGPS and rfm95
-  adjustment for fablab Kaasfabriek Junior IoT Baloon Challenge february 2017
-             met leerling teams bij fablab de Kaasfabriek in Alkmaar
-                     deze software op het internet is natuurlijk geheim...
-                                  ...anders kunnen ze makkelijk afkijken!
-  See https://www.thethingsnetwork.org/labs/story/junior-iot-ballonnen-challenge
-
-  Software plakker: Dennis --> dennis at didnotreveal dot nope
-  Educatie kletser: Marco --> marco@kaasfabriek.nl
-  Regie en inspiratie: Kaasfabriek --> info at kaasfabriek punt nl
-
-Important:
-how to build your first node, practical soldering tips in nice pictures,
-https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself
- --> you will need to use our pin mapping instead
-
---------------------------------------------------------------------------------
-Suggested pin mapping:
- this new mapping puts the boards next to each other as shown in schema below,
-         can be folded into compact stack with the 868 antenna outside the pile
---------------------------------------------------------------------------------
-                        ║                 ║ USB to serial programmer
-                        ║3.3 TX RX GND 5V ║
-                        ╚══╬══╬══╬══╬══╬══╝ while programming, power comes
-                           x  │  │  │  x       from external supply to get
-                              │  │  │               enough current for GPS
-                           ┌──│──┘  │
-                           │  │  x  │      ARDUINO pro mini (2 euro)
-  GPS unit            ╔═╬══╬══╬══╬══╬══╬═╗ 8Mhz 32kb 3.3 volt
-  NEO-6M              ║ G TX RX VCC GND B║
-  3.3 volt            ║                  ║      * ports marked are non-mappable
-  (10 euro)           ╬ TXD          RAW ╬x         others can be re-configured
- ╔═══════════╗        ╬ RXD          GND ╬─gnd
- ║           ║        ╬ RST          RST ╬x        x marked remains unconnected
- ║     (PPS) ╬x       ╬ GND          VCC ╬─3.3v
- ║       RXD ╬─────tx─╬ 2             A3 ╬─────────────────────────────────┐
- ║  ro)  TXD ╬─────rx─╬ 3             A2 ╬───────────────────────────────┐ │
- ║       GND ╬─gnd    ╬ 4             A1 ╬─────────────────────────────┐ │ │
-┌╬  lt   VCC ╬─3.3v   ╬ 5             A0 ╬────┐    ╔═══════════════╗   │ │ │
-│║           ║        ╬ 6       (led) 13*╬────│─┐  ╬ GND      DIO2 ╬───│─│─┘
-│╚═══════════╝        ╬ 7        MISO 12*╬────│─│──╬*MISO     DIO1 ╬───│─┘
-│                     ╬ 8        MOSI 11*╬────│─│──╬*MOSI     DIO0 ╬───┘
-│ ┌─────────────┐     ╬ 9             10 ╬──┐ │ └──╬*SCK      3.3V ╬──3.3v
-└─┤ gps antenna │     ║(GND A4 A5 A6 A7) ║  │ └────╬ NSS      DIO4 ╬x
-  └─────────────┘     ╚═══╬══╬══╬══╬══╬══╝  └──────╬ RESET    DIO3 ╬x
-                                                  x╬ DIO5      GND ╬gnd
-                                                gnd╬ GND       ANT ╬──┐
-      power to    power to    power to             ╚═══════════════╝  │
-        GPS       arduino     RFM                   RFM95             │
-         | |       | |       | |                    3.3 volt     ///////////
-         └─|───────┴─|───────┴─|───────┐            (10 euro)    / helical /
-           └─────────┴─────────┴─────┐ │                         / 868Mhz  /
-                                     - +                         / antenna /
-                            JST male connector                   ///////////
- choice:
-  2x AA battery -> JST female connector
- 1S lipo 3.7v -> lipo protect -> JST female connector
- 2s lipo 7.4V -> lipo protect -> step down to 3.3 v -> JST female connector
- 5 volt from usb -> step down to 3.3 volt -> JST female connector
- 9 volt or 12 volt battery -> step down to 3.3 v -> JST female connector
---------------------------------------------------------------------------------
+# GPS-Lora-Balloon-rfm95-TinyGPS <br/>
+ <br/>
+Libraries required: <br/>
+   TinyGPS       https://github.com/mikalhart/TinyGPS <br/>
+   arduino-lmic  https://github.com/matthijskooijman/arduino-lmic <br/>
+ <br/>
+Lora location transmittor with TinyGPS and rfm95 <br/>
+  adjustment for fablab Kaasfabriek Junior IoT Baloon Challenge february 2017 <br/>
+             met leerling teams bij fablab de Kaasfabriek in Alkmaar <br/>
+                     deze software op het internet is natuurlijk geheim... <br/>
+                                  ...anders kunnen ze makkelijk afkijken! <br/>
+  See https://www.thethingsnetwork.org/labs/story/junior-iot-ballonnen-challenge <br/>
+ <br/>
+  Software plakker: Dennis --> dennis at didnotreveal dot dev0 <br/>
+  Educatie kletser: Marco --> marco@kaasfabriek.nl <br/>
+  Regie en inspiratie: Kaasfabriek --> info at kaasfabriek punt nl <br/>
+ <br/>
+Important: <br/>
+how to build your first node, practical soldering tips in nice pictures,  <br/>
+https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself <br/>
+ --> you will need to use our pin mapping instead <br/>
+ <br/>
+---------------------------------------------------------------------------- <br/>
+Suggested pin mapping:                                                       <br/>
+ this new mapping puts the boards next to each other as shown in schema below, <br/>
+         can be folded into compact stack with the 868 antenna outside the pile <br/>
+----------------------------------------------------------------------------- <br/>
+                        ║                 ║ USB to serial programmer        <br/>
+                        ║3.3 TX RX GND 5V ║                               <br/>
+                        ╚══╬══╬══╬══╬══╬══╝ while programming, power comes <br/>
+                           x  │  │  │  x       from external supply to get <br/>
+                              │  │  │               enough current for GPS <br/>
+                           ┌──│──┘  │                                     <br/>
+                           │  │  x  │      ARDUINO pro mini (2 euro)      <br/>
+  GPS unit            ╔═╬══╬══╬══╬══╬══╬═╗ 8Mhz 32kb 3.3 volt             <br/>
+  NEO-6M              ║ G TX RX VCC GND B║                                   <br/>
+  3.3 volt            ║                  ║      * ports marked are non-mappable <br/>
+  (10 euro)           ╬ TXD          RAW ╬x         others can be re-configured <br/>
+ ╔═══════════╗        ╬ RXD          GND ╬─gnd                                  <br/>
+ ║           ║        ╬ RST          RST ╬x        x marked remains unconnected <br/>
+ ║     (PPS) ╬x       ╬ GND          VCC ╬─3.3v                                <br/>
+ ║       RXD ╬─────tx─╬ 2             A3 ╬────────────────────────────────┐ <br/>
+ ║  ro)  TXD ╬─────rx─╬ 3             A2 ╬──────────────────────────────┐ │ <br/>
+ ║       GND ╬─gnd    ╬ 4             A1 ╬────────────────────────────┐ │ │ <br/>
+┌╬  lt   VCC ╬─3.3v   ╬ 5             A0 ╬────┐    ╔═══════════════╗  │ │ │ <br/>
+│║           ║        ╬ 6       (led) 13*╬────│─┐  ╬ GND      DIO2 ╬──│─│─┘ <br/>
+│╚═══════════╝        ╬ 7        MISO 12*╬────│─│──╬*MISO     DIO1 ╬──│─┘   <br/>
+│                     ╬ 8        MOSI 11*╬────│─│──╬*MOSI     DIO0 ╬──┘    <br/>
+│ ┌─────────────┐     ╬ 9             10 ╬──┐ │ └──╬*SCK      3.3V ╬──3.3v  <br/>
+└─┤ gps antenna │     ║(GND A4 A5 A6 A7) ║  │ └────╬ NSS      DIO4 ╬x      <br/>
+  └─────────────┘     ╚═══╬══╬══╬══╬══╬══╝  └──────╬ RESET    DIO3 ╬x     <br/>
+                                                  x╬ DIO5      GND ╬gnd   <br/>
+                                                gnd╬ GND       ANT ╬──┐   <br/>
+      power to    power to    power to             ╚═══════════════╝  │   <br/>
+        GPS       arduino     RFM                   RFM95             │   <br/>
+         | |       | |       | |                    3.3 volt     /////////// <br/>
+         └─|───────┴─|───────┴─|───────┐            (10 euro)    / helical / <br/>
+           └─────────┴─────────┴─────┐ │                         / 868Mhz  / <br/>
+                                     - +                         / antenna / <br/>
+                            JST male connector                   /////////// <br/>
+ choice:                                                                  <br/>
+  2x AA battery -> JST female connector                                  <br/>
+ 1S lipo 3.7v -> lipo protect -> JST female connector                     <br/>
+ 2s lipo 7.4V -> lipo protect -> step down to 3.3 v -> JST female connector <br/>
+ 5 volt from usb -> step down to 3.3 volt -> JST female connector          <br/>
+ 9 volt or 12 volt battery -> step down to 3.3 v -> JST female connector     <br/>
+----------------------------------------------------------------------------- <br/>
