@@ -4,7 +4,7 @@
 - TinyGPS       https://github.com/mikalhart/TinyGPS
 - arduino-lmic  https://github.com/matthijskooijman/arduino-lmic
 
-##Lora location transmittor with TinyGPS and rfm95 
+##Lora location transmittor with TinyGPS and rfm95 for Kaasfabriek project
 ```
   adjustment for fablab Kaasfabriek Junior IoT Baloon Challenge february 2017
              met leerling teams bij fablab de Kaasfabriek in Alkmaar
