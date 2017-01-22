@@ -20,7 +20,8 @@ how to build your first node, practical soldering tips in nice pictures,  <BR/>
 https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself <BR/>
  --> you will need to use our pin mapping instead <BR/>
  <BR/>
-```---------------------------------------------------------------------------- <BR/>
+```
+---------------------------------------------------------------------------- <BR/>
 ##Suggested pin mapping:                                                       <BR/>
  this new mapping puts the boards next to each other as shown in schema below, <BR/>
          can be folded into compact stack with the 868 antenna outside the pile <BR/>
