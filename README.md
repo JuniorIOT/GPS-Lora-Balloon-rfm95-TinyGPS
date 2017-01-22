@@ -62,9 +62,9 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
                                        - +                       helical ///// 
                                 JST male connector                868Mhz ///// 
      power supply suggestions:                                   antenna /////
-      2x AA battery -> JST female connector                              /////
-     1S lipo 3.7v -> lipo protect -> JST female connector                     
-     2s lipo 7.4V -> lipo protect -> step down to 3.3 v -> JST female connector 
-     5 volt from usb -> step down to 3.3 volt -> JST female connector          
-     9 volt or 12 volt battery -> step down to 3.3 v -> JST female connector     
+     - 2x AA battery -> JST female connector                             /////
+     - 1S lipo 3.7v -> lipo protect -> JST female connector                     
+     - 2s lipo 7.4V -> lipo protect -> step down to 3.3 v -> JST female connector 
+     - 5 volt from usb -> step down to 3.3 volt -> JST female connector          
+     - 9 volt or 12 volt battery -> step down to 3.3 v -> JST female connector     
     ----------------------------------------------------------------------------- 
