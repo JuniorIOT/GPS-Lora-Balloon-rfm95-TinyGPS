@@ -70,17 +70,17 @@ static osjob_t sendjob;
 // const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
  const unsigned TX_INTERVAL = 40;    // actually an additional bit is added for the duration of the radio processing
 
-// Pin mapping
+// Pin mapping, adjusted to get wires to same side as NISO & NOSI
 const lmic_pinmap lmic_pins = {
-    .nss = 10,
+    .nss = 14,                 // mapping for NSS, was: 10, new: 14=A0 (is digital 14)
     .rxtx = LMIC_UNUSED_PIN,
-    .rst = 5,
-    .dio = {2, 3, 4},
+    .rst = 10,                  // mapping for reset. was: 5, new: 10
+    .dio = {15, 16, 17},          // mapping for DIO0, DIO1, DIO2  was: 2, 3, 4  new: A1=15, A2=16, A3=17
 };
 
 
 TinyGPS gps;
-SoftwareSerial ss(8, 9);  // originally port 8, 9
+SoftwareSerial ss(3, 2);  // RX, TX    to connect arduino RX, TX --> GPS TXD, RXD    was 8, 9; new: 3, 2
 //SoftwareSerial ss(9, 8);    // or try if wires have been reversed, can be tested by reviewing output in serial/debug window
 
 // event gets hooked into the system
@@ -184,20 +184,11 @@ void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blo
         Serial.print(" / ");
         Serial.print( mydata[9], HEX );
         Serial.print(" ");
-        Serial.print( mydata[10], HEX );
-        Serial.print("  sizeof(mydata) = ");
-        Serial.print(sizeof(mydata));
-        Serial.print("  fixed message_size = ");
-        Serial.println(message_size);
+        Serial.println( mydata[10], HEX );
     
         // LMIC_setTxData2(1, mydata, sizeof(mydata), 0);  //Dennis adjusted sizeof(mydata)-1 to sizeof(mydata); that is common with null terminated string as the terminating char(0) is not added to the message
-        LMIC_setTxData2(1, mydata, message_size, 0);   //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttn console
-            // LMIC_setTxData2 (u1_t port, xref2u1_t data, u1_t dlen, u1_t confirmed)
-            //  Prepare upstream data transmission at the next possible time. 
-            //    parameter 1 = port
-            //    parameter 2 = mydata, actually this is passed as a pointer (aka reference) to a byte array (aka memory buffer)
-            //    parameter 3 = the world agrees this needs to be: sizeof(mydata)-1
-            //    parameter 4 = Fourth parameter enables confirmed messages if value is 1, then read explanation at https://www.thethingsnetwork.org/forum/t/acknowledgements-downlink-ack-rfm95w-solved/1944
+        LMIC_setTxData2(1, mydata, message_size, 0);   
+
         Serial.println(F("Packet queued"));
     }
     // Next TX is scheduled after TX_COMPLETE event.
