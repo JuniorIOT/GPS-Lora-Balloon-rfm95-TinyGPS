@@ -31,11 +31,11 @@
  *******************************************************************************/
 
  // TODO: investigate OTAA, good description here: Moteino, LMIC and OTAA Walkthrough https://github.com/lukastheiler/ttn_moteino
- // TODO: add flightmode. Good test script seems available here:  https://ukhas.org.uk/guides:ublox6
-// TODO: Keep last known good GPS data, ignore invalid GPS data, use coordinates 0,0 for invalid/no GPS
+ // TODO: add GPS flightmode. Good test script seems available here:  https://ukhas.org.uk/guides:ublox6
+ // TODO: GPS powersafe. https://ukhas.org.uk/guides:ublox_psm
+// todo: if no good read from GPS in last 2 minutes, then reset arduino as a manual reset fixes the problem?? Or auto-reset every 120 minutes. investigate
 // TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
-// TODO: investigate why/if hdop may be inaccurate, or more likely I have an error in interpretation and it needs to be scaled down I will check in our next iteration. I hope this does not affect the map.
-
+// TODO: each few messages, send one at high power
 
 #define DEBUG     // if DEBUG is defined, some code is added to display some basic debug info
 #define DE //BUG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
@@ -48,12 +48,12 @@
 #include <TinyGPS.h>
 #include "keys.h"
 // LoRaWAN NwkSKey, network session key
-// This is the default Semtech key, which is used by the early prototype TTN
-// network.
-
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
+// This is the default Semtech key, which is used by the early prototype TTN
+// network.
+
 // DISABLE_JOIN is set in config.h, otherwise the linker will complain).
 void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
@@ -67,8 +67,15 @@ const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker ser
 static osjob_t sendjob;
 
 // Schedule TX event every this many seconds (might become longer due to duty cycle limitations).
+// https://www.thethingsnetwork.org/forum/t/limitations-data-rate-packet-size-30-seconds-uplink-and-10-messages-downlink-per-day-fair-access-policy/1300
+//   Golden rule: 30 seconds air-time per device per day
+//    For 10 bytes of payload, this translates in (approx.):
+//    20 messages per day at SF12  --> approx one hour in-between
+//    500 messages per day at SF7  --> 500 / 24 = 20 per hour, or 3 minutes in-between
+//    more for SF7BW250 and FSK (local-area)
+ 
 // const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
- const unsigned TX_INTERVAL = 40;    // actually an additional bit is added for the duration of the radio processing
+ const unsigned TX_INTERVAL = 150;  //  500 messages per day at SF7  --> 500 / 24 = 20 per hour, or 3 minutes in-between
 
 
 // Pin mapping, adjusted to get wires to same side as NISO & NOSI
@@ -189,7 +196,7 @@ void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blo
         if (message_size>9) Serial.print( mydata[10], HEX );
         Serial.println("]");
     
-        // LMIC_setTxData2(1, mydata, sizeof(mydata), 0);  //Dennis adjusted sizeof(mydata)-1 to sizeof(mydata); that is common with null terminated string as the terminating char(0) is not added to the message
+        //  LMIC_setTxData2( LORAWAN_APP_PORT, LMIC.frame, LORAWAN_APP_DATA_SIZE, LORAWAN_CONFIRMED_MSG_ON );
         LMIC_setTxData2(1, mydata, message_size, 0);   
 
         Serial.println(F("Packet queued"));
@@ -251,14 +258,23 @@ void lmic_init()
     LMIC_selectSubBand(1);
     #endif
 
+// Disable data rate adaptation - per http://platformio.org/lib/show/842/IBM%20LMIC%20framework%20v1.51%20for%20Arduino
+//      and http://www.developpez.net/forums/attachments/p195381d1450200851/environnements-developpement/delphi/web-reseau/reseau-objet-connecte-lorawan-delphi/lmic-v1.5.pdf/
+LMIC_setAdrMode(0);     // Enable or disable data rate adaptation. Should be turned off if the device is mobile
     // Disable link check validation
-    LMIC_setLinkCheckMode(0);
+    LMIC_setLinkCheckMode(0);  //Enable/disable link check validation. Link check mode is enabled by default and is used to periodically verify network connectivity. Must be called only if a session is established.
+// Disable beacon tracking
+LMIC_disableTracking ();  // Disable beacon tracking. The beacon will be no longer tracked and, therefore, also pinging will be disabled.
+// Stop listening for downstream data (periodical reception)
+LMIC_stopPingable();  //Stop listening for downstream data. Periodical reception is disabled, but beacons will still be tracked. In order to stop tracking, the beacon a call to LMIC_disableTracking() is required
 
     // TTN uses SF9 for its RX2 window.
     LMIC.dn2Dr = DR_SF9;
 
     // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-    LMIC_setDrTxpow(DR_SF7,14);
+    LMIC_setDrTxpow(DR_SF7,14);   // Set data rate and transmit power. Should only be used if data rate adaptation is disabled.
+    // for the ttn mapper always use SF7. For Balloon, up to SF12 can be used, however that will require 60 minutes quiet time
+
 }
 
 void setup() {
@@ -269,9 +285,8 @@ void setup() {
     
     Serial.println();
     Serial.println();
-    Serial.println("Starting Balloon RFM95");
+    Serial.println("Junior Balloon RFM95 Starting ");
     Serial.print("Simple TinyGPS library v. "); Serial.println(TinyGPS::library_version());
-    Serial.println("by Mikal Hart");
     Serial.println();
   
     // GPS serial
@@ -291,7 +306,7 @@ void setup() {
     do_send(&sendjob);
 }
 
-bool blink_on = false;
+//bool blink_on = false;
 void loop() {
     
     // process the serial feed from GPS module
