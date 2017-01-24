@@ -37,7 +37,7 @@
 // TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
 // TODO: each few messages, send one at high power
 
-#define DEBUG     // if DEBUG is defined, some code is added to display some basic debug info
+#define DEBU //G     // if DEBUG is defined, some code is added to display some basic debug info
 #define DE //BUG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
 
 #include <lmic.h>
@@ -57,26 +57,53 @@
 // DISABLE_JOIN is set in config.h, otherwise the linker will complain).
 void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
-void os_getDevKey (u1_t* buf) { }
+void os_getDevKey (u1_t* buf) { } 
 
 //uint8_t mydata[9];   // mydata[9] allows you to read and write to mydata[0] .. mydata[8]. Higher numbers work but are invalid.
 uint8_t mydata[14];  // a few bytes added to the memory buffer to play with
 const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
-//const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttn console
+//const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttnonsole
 
 static osjob_t sendjob;
 
 // Schedule TX event every this many seconds (might become longer due to duty cycle limitations).
 // https://www.thethingsnetwork.org/forum/t/limitations-data-rate-packet-size-30-seconds-uplink-and-10-messages-downlink-per-day-fair-access-policy/1300
 //   Golden rule: 30 seconds air-time per device per day
-//    For 10 bytes of payload, this translates in (approx.):
-//    20 messages per day at SF12  --> approx one hour in-between
-//    500 messages per day at SF7  --> 500 / 24 = 20 per hour, or 3 minutes in-between
-//    more for SF7BW250 and FSK (local-area)
+//    For 10 bytes of payload (plus 13 bytes overhead), this is whispered to imply:
+//    approx 20 messages per day at SF12  --> approx one per hour 
+//    500 messages per day at SF7  --> 500 / 24 = 20 per hour, or 3 minutes in-between sends (average)
+//  for 9 bytes message, the 500 count is upped to 523 or 22 messages per hour, or 2:45 minute average between sends
+//
+//  For each step-up in SF Spreading factor the air-time doubles, so the allowed number of messages gets divided in half
+//    meaning for example you can send one SF8 for the same cost as two SF7 messages
+//  Simply one setting and one interval would be easiest.
+//
+//      spreading | avg time between | nbr of messages
+//      factor    | 9 byte sends     | per hour or per day
+//     -----------|------------------|-----------------
+//      DR_SF7    |  2:45 minutes    |  22 per hour, 528 per day
+//      DR_SF8    |  5:30 minutes    |  11 per hour, 264 per day
+//      DR_SF9    |  11 minutes      |  5.5 per hour, 132 per day
+//      DR_SF10   |  22 minutes      |  2.75 per hour, 66 per day
+//      DR_SF11   |  44 minutes      |  1.3 per hour, 33 per day
+//      DR_SF12   |  1:28 hours      |              16.5 per day
+// Sending pattern would be:
+//     a. All messages are SF7, interval 2:45 minutes = 165 seconds (setting is at 105); in tests a setting of 130 results in 180 sec intervals so the library adds 50 sec.
+//
+//  However in tests we found that coverage in the Netherlands still varies, so we vant a few loud sends per hour.
+//  Let's make a mix. You can do what you prefer... I'd prefer to see where my balloon is once every 5 or 6 minutes, and one loud send every half hour.
+//     b. Loudest. One SF12 message - will fill up the hour and will not allow more messages. Not desirable.
+//     c. Less loud. One SF11 uses 44 minutes, leaves budget for 6 messages as SF7. Total of 7 messages per hour, not frequent enough.
+//     d. Even less loud. One DR_SF10 is 22 minutes of budget, one SF9 adds 11 minutes; leaves budget to send another 10 messages as SF7 to add another 27.5 min. 
+//        Total 12 messages in one hour. 
+//        interval 5 minutes, message stream: DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9 
+//  let's build and test scenario (d)  with interval at 5 min = 300 sec (setting at 250)
  
-// const unsigned TX_INTERVAL = 60;    // actually an additional bit is added for the duration of the radio processing
- const unsigned TX_INTERVAL = 150;  //  500 messages per day at SF7  --> 500 / 24 = 20 per hour, or 3 minutes in-between
-
+const unsigned TX_INTERVAL = 20; 
+/////const unsigned TX_INTERVAL = 250;  // transmit interval, in tests it seems the library adds some 30-50 seconts to this value 
+/////dr_t LMIC_DR_sequence[] = {DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
+/////int LMIC_DR_sequence_count = 12;
+/////int LMIC_DR_sequence_index = 0;
 
 // Pin mapping, adjusted to get wires to same side as NISO & NOSI
 const lmic_pinmap lmic_pins = {
@@ -159,7 +186,8 @@ void onEvent (ev_t ev) {
 }
 
 // do_send call is scheduled in event handler
-void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
+void do_send(osjob_t* j){  
+  // starting vesion was same as https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
     
     Serial.println("\ndo_send was called.");
     // Check if there is not a current TX/RX job running
@@ -186,20 +214,33 @@ void do_send(osjob_t* j){  // same as https://github.com/tijnonlijn/RFM-node/blo
         Serial.print( mydata[5], HEX );
         Serial.print(" ");
         Serial.print( mydata[6], HEX );
-        if (message_size>6) Serial.print(" ");
-        if (message_size>6) Serial.print( mydata[7], HEX );
         if (message_size>7) Serial.print(" ");
-        if (message_size>7) Serial.print( mydata[8], HEX );
-        if (message_size>8) Serial.print(" / ");
-        if (message_size>8) Serial.print( mydata[9], HEX );
-        if (message_size>9) Serial.print(" ");
-        if (message_size>9) Serial.print( mydata[10], HEX );
-        Serial.println("]");
-    
+        if (message_size>7) Serial.print( mydata[7], HEX );
+        if (message_size>8) Serial.print(" ");
+        if (message_size>8) Serial.print( mydata[8], HEX );
+        if (message_size>9) Serial.print(" / ");
+        if (message_size>9) Serial.print( mydata[9], HEX );
+        if (message_size>10) Serial.print(" ");
+        if (message_size>10) Serial.print( mydata[10], HEX );
+        Serial.print("]    ");
+        
+/////        Serial.print("DR [ ");
+/////        Serial.print( LMIC_DR_sequence_index );
+/////        Serial.print(" ] = ");
+/////        Serial.print( LMIC_DR_sequence[LMIC_DR_sequence_index] );
+        
+        // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
+        // for the ttn mapper always use SF7. For Balloon, up to SF12 can be used, however that will require 60 minutes quiet time
+ /////       LMIC_setDrTxpow(LMIC_DR_sequence[LMIC_DR_sequence_index],14);   // void LMIC_setDrTxpow (dr_t dr, s1_t txpow)... Set data rate and transmit power. Should only be used if data rate adaptation is disabled.
+        
+/////        LMIC_DR_sequence_index = LMIC_DR_sequence_index + 1;
+/////        if (LMIC_DR_sequence_index >= LMIC_DR_sequence_count) LMIC_DR_sequence_index=0;
+
+        // NOW SEND SOME DATA OUT
         //  LMIC_setTxData2( LORAWAN_APP_PORT, LMIC.frame, LORAWAN_APP_DATA_SIZE, LORAWAN_CONFIRMED_MSG_ON );
         LMIC_setTxData2(1, mydata, message_size, 0);   
 
-        Serial.println(F("Packet queued"));
+        Serial.println(" - Packet queued");
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
@@ -260,20 +301,19 @@ void lmic_init()
 
 // Disable data rate adaptation - per http://platformio.org/lib/show/842/IBM%20LMIC%20framework%20v1.51%20for%20Arduino
 //      and http://www.developpez.net/forums/attachments/p195381d1450200851/environnements-developpement/delphi/web-reseau/reseau-objet-connecte-lorawan-delphi/lmic-v1.5.pdf/
-LMIC_setAdrMode(0);     // Enable or disable data rate adaptation. Should be turned off if the device is mobile
+//LMIC_setAdrMode(0);     // Enable or disable data rate adaptation. Should be turned off if the device is mobile
     // Disable link check validation
     LMIC_setLinkCheckMode(0);  //Enable/disable link check validation. Link check mode is enabled by default and is used to periodically verify network connectivity. Must be called only if a session is established.
 // Disable beacon tracking
-LMIC_disableTracking ();  // Disable beacon tracking. The beacon will be no longer tracked and, therefore, also pinging will be disabled.
+//LMIC_disableTracking ();  // Disable beacon tracking. The beacon will be no longer tracked and, therefore, also pinging will be disabled.
 // Stop listening for downstream data (periodical reception)
-LMIC_stopPingable();  //Stop listening for downstream data. Periodical reception is disabled, but beacons will still be tracked. In order to stop tracking, the beacon a call to LMIC_disableTracking() is required
+//LMIC_stopPingable();  //Stop listening for downstream data. Periodical reception is disabled, but beacons will still be tracked. In order to stop tracking, the beacon a call to LMIC_disableTracking() is required
 
     // TTN uses SF9 for its RX2 window.
     LMIC.dn2Dr = DR_SF9;
 
     // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-    LMIC_setDrTxpow(DR_SF7,14);   // Set data rate and transmit power. Should only be used if data rate adaptation is disabled.
-    // for the ttn mapper always use SF7. For Balloon, up to SF12 can be used, however that will require 60 minutes quiet time
+    LMIC_setDrTxpow(DR_SF7,14);   // void LMIC_setDrTxpow (dr_t dr, s1_t txpow)... Set data rate and transmit power. Should only be used if data rate adaptation is disabled.
 
 }
 
@@ -310,7 +350,8 @@ void setup() {
 void loop() {
     
     // process the serial feed from GPS module
-    Serial.println("Read GPS... ");
+    Serial.println(" ");
+    //Serial.println("Read GPS... ");
     char c;
     unsigned long start = millis();
     do 
@@ -325,23 +366,10 @@ void loop() {
         if (gps.encode(c)) // Did a new valid sentence come in?
             process_gps_values();
       }
-    } while (millis() - start < 6000); 
-    
-    //process_gps_values(); 
+    } while (millis() - start < 20000); 
      
     os_runloop_once();
 }
-//
-//void led_on()  // we are not using the blink as also the lora is connected to port 13
-//{
-//  digitalWrite(13, 1);
-//}
-//
-//void led_off()
-//{
-//  digitalWrite(13, 0);
-//}
-
 
 void process_gps_values()
 { 
@@ -367,6 +395,7 @@ void process_gps_values()
   if (GPS_values_are_valid) put_gpsvalues_into_sendbuffer( flat, flon, alt, hdopNumber);
     // after init, sendbuffer holds 0,0 lovation; after first fix it will retain the last valid location
   
+  Serial.print(".");
   //show me something
   #ifdef DEBUG
   // keep some values out as seems to take performance and/or make for code to miss GPS sentences
@@ -376,6 +405,7 @@ void process_gps_values()
   //gps.stats(&chars, &sentences, &failed);
   //sat = gps.satellites();
   
+  Serial.println();
   Serial.print("Data: ");
   if (GPS_values_are_valid) Serial.print("(valid) ");
   if (!GPS_values_are_valid) Serial.print("(** INVALID");
