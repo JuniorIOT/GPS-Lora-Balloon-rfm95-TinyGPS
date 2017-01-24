@@ -13,7 +13,7 @@
 ```
 See https://www.thethingsnetwork.org/labs/story/junior-iot-ballonnen-challenge 
 
-- Software plakker: Dennis --> dennis at didnotreveal dot dev0
+- Software plakker: Dennis --> dennis.ruigrok@gmail.com
 - Educatie kletser: Marco --> marco@kaasfabriek.nl
 - Regie en inspiratie: Kaasfabriek --> info at kaasfabriek punt nl
 
