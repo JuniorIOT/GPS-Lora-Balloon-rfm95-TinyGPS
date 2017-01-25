@@ -61,8 +61,8 @@ void os_getDevKey (u1_t* buf) { }
 
 //uint8_t mydata[9];   // mydata[9] allows you to read and write to mydata[0] .. mydata[8]. Higher numbers work but are invalid.
 uint8_t mydata[14];  // a few bytes added to the memory buffer to play with
-const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
-//const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttnonsole
+//const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
+const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttnonsole
 
 static osjob_t sendjob;
 

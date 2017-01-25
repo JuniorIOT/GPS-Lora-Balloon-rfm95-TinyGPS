@@ -13,7 +13,7 @@
 ```
 See https://www.thethingsnetwork.org/labs/story/junior-iot-ballonnen-challenge
 
-- Software plakker: Dennis --> dennis at didnotreveal dot dev0
+- Software plakker: Dennis --> dennis.ruigrok@gmail.com
 - Educatie kletser: Marco --> marco@kaasfabriek.nl
 - Regie en inspiratie: Kaasfabriek --> info at kaasfabriek punt nl
 
@@ -60,6 +60,7 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
                                        - +                       helical /////
                                 JST female connector              868Mhz /////
      power supply suggestions:                                   antenna /////
+<<<<<<< HEAD
      - 1S lipo 3.7v with lipo protect and JST male connector
      - 2x AA battery -> JST male connector
      - 1S lipo 3.7v -> lipo protect -> JST male connector
@@ -67,3 +68,12 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
      - 5 volt from usb -> step down to 3.3 volt -> JST male connector
      - 9 volt or 12 volt battery -> step down to 3.3v -> JST male connector
     ----------------------------------------------------------------------------- 
+=======
+     - 1S lipo 3.7v with lipo protect and JST male connector 
+     - 2x AA battery -> JST male connector                          
+     - 1S lipo 3.7v -> lipo protect -> JST male connector                     
+     - 2s lipo 7.4V -> lipo protect -> step down to 3.3 v -> JST male connector 
+     - 5 volt from usb -> step down to 3.3 volt -> JST male connector          
+     - 9 volt or 12 volt battery -> step down to 3.3 v -> JST male connector     
+    ----------------------------------------------------------------------------- 
+>>>>>>> origin/master
