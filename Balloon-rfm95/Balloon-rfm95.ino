@@ -99,11 +99,11 @@ static osjob_t sendjob;
 //        interval 5 minutes, message stream: DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9 
 //  let's build and test scenario (d)  with interval at 5 min = 300 sec (setting at 250)
  
-const unsigned TX_INTERVAL = 20; 
-/////const unsigned TX_INTERVAL = 250;  // transmit interval, in tests it seems the library adds some 30-50 seconts to this value 
-/////dr_t LMIC_DR_sequence[] = {DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
-/////int LMIC_DR_sequence_count = 12;
-/////int LMIC_DR_sequence_index = 0;
+//const unsigned TX_INTERVAL = 20; 
+const unsigned TX_INTERVAL = 250;  // transmit interval, in tests it seems the library adds some 30-50 seconts to this value 
+dr_t LMIC_DR_sequence[] = {DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
+int LMIC_DR_sequence_count = 12;
+int LMIC_DR_sequence_index = 0;
 
 // Pin mapping, adjusted to get wires to same side as NISO & NOSI
 const lmic_pinmap lmic_pins = {
@@ -224,17 +224,23 @@ void do_send(osjob_t* j){
         if (message_size>10) Serial.print( mydata[10], HEX );
         Serial.print("]    ");
         
-/////        Serial.print("DR [ ");
-/////        Serial.print( LMIC_DR_sequence_index );
-/////        Serial.print(" ] = ");
-/////        Serial.print( LMIC_DR_sequence[LMIC_DR_sequence_index] );
+        Serial.print("DR [ ");
+        Serial.print( LMIC_DR_sequence_index );
+        Serial.print(" ] = ");
+        Serial.print( LMIC_DR_sequence[LMIC_DR_sequence_index] );
+        if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF7) Serial.print(" DR_SF7 "); 
+        if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF8) Serial.print(" DR_SF8 "); 
+        if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF9) Serial.print(" DR_SF9 "); 
+        if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF10) Serial.print(" DR_SF10 "); 
+        if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF11) Serial.print(" DR_SF11 "); 
+        if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF12) Serial.print(" DR_SF12 "); 
         
         // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
         // for the ttn mapper always use SF7. For Balloon, up to SF12 can be used, however that will require 60 minutes quiet time
- /////       LMIC_setDrTxpow(LMIC_DR_sequence[LMIC_DR_sequence_index],14);   // void LMIC_setDrTxpow (dr_t dr, s1_t txpow)... Set data rate and transmit power. Should only be used if data rate adaptation is disabled.
+        LMIC_setDrTxpow(LMIC_DR_sequence[LMIC_DR_sequence_index],14);   // void LMIC_setDrTxpow (dr_t dr, s1_t txpow)... Set data rate and transmit power. Should only be used if data rate adaptation is disabled.
         
-/////        LMIC_DR_sequence_index = LMIC_DR_sequence_index + 1;
-/////        if (LMIC_DR_sequence_index >= LMIC_DR_sequence_count) LMIC_DR_sequence_index=0;
+        LMIC_DR_sequence_index = LMIC_DR_sequence_index + 1;
+        if (LMIC_DR_sequence_index >= LMIC_DR_sequence_count) LMIC_DR_sequence_index=0;
 
         // NOW SEND SOME DATA OUT
         //  LMIC_setTxData2( LORAWAN_APP_PORT, LMIC.frame, LORAWAN_APP_DATA_SIZE, LORAWAN_CONFIRMED_MSG_ON );
@@ -343,7 +349,10 @@ void setup() {
     lmic_init();  // code moved to sub as per example JP
     
     // Start job
-    do_send(&sendjob);
+    //do_send(&sendjob);
+    // Start job delayed so system can look at GPS first
+    os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(5), do_send);
+            
 }
 
 //bool blink_on = false;
@@ -366,9 +375,9 @@ void loop() {
         if (gps.encode(c)) // Did a new valid sentence come in?
             process_gps_values();
       }
-    } while (millis() - start < 20000); 
+    } while (millis() - start < 3000); // if too high a value then system wil delay scheduled jobs and the send sequence will take too long
      
-    os_runloop_once();
+    os_runloop_once();  // system picks up scheduled jobs
 }
 
 void process_gps_values()
