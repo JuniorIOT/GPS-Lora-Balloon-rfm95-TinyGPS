@@ -31,8 +31,10 @@
  *******************************************************************************/
 
  // TODO: investigate OTAA, good description here: Moteino, LMIC and OTAA Walkthrough https://github.com/lukastheiler/ttn_moteino
+ // ACTION: OTAA test code can be tested on device
  // TODO: add GPS flightmode. Good test script seems available here:  https://ukhas.org.uk/guides:ublox6
  // TODO: GPS powersafe. https://ukhas.org.uk/guides:ublox_psm
+ // ACTION: made function to configure GPS, the u-center software can be used to make the configurations you want. See: https://www.youtube.com/watch?v=iWd0gCOYsdo
 // todo: if no good read from GPS in last 2 minutes, then reset arduino as a manual reset fixes the problem?? Or auto-reset every 120 minutes. investigate
 // TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
 // TODO: each few messages, send one at high power
@@ -117,6 +119,10 @@ const lmic_pinmap lmic_pins = {
 TinyGPS gps;
 SoftwareSerial ss(3, 2);  // RX, TX    to connect arduino RX, TX --> GPS TXD, RXD    was 8, 9; new: 3, 2
 //SoftwareSerial ss(9, 8);    // or try if wires have been reversed, can be tested by reviewing output in serial/debug window
+
+boolean goToEnergySafeMode = false;
+long goToEnergySafeAfterMilliSeconds = 0;
+long fromNow = 0;
 
 // event gets hooked into the system
 void onEvent (ev_t ev) {
@@ -378,6 +384,14 @@ void loop() {
     } while (millis() - start < 3000); // if too high a value then system wil delay scheduled jobs and the send sequence will take too long
      
     os_runloop_once();  // system picks up scheduled jobs
+
+    // Energy safe mode?
+    if(goToEnergySafeMode)
+    if(millis() - fromNow > goToEnergySafeAfterMilliSeconds) {
+      uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the usb interval to every 10 seconds instead of every 1 second
+      changeGPSConfiguration(data);
+      goToEnergySafeMode = false;
+    }
 }
 
 void process_gps_values()
@@ -487,7 +501,14 @@ void process_gps_values()
   if (message_size>9) Serial.print(" ");
   if (message_size>9) Serial.print( mydata[10], HEX );
   Serial.println("]");
-  #endif    
+  #endif  
+
+  // energy safe after number of seconds
+  if(GPS_values_are_valid) {
+    goToEnergySafeMode = true;
+    goToEnergySafeAfterMilliSeconds = 60000;
+    fromNow = millis();
+  }
 }
 
 
@@ -590,4 +611,9 @@ void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNu
 //              lat -900,000 .. 900,000; lon -1,800,000 .. 1,800,000
 //              where 1/10,000 degree is about 10 meters --> we'd like a finer grain so do not use get_position
 //           Alternative explanation is that it returns degrees * 1,000,000  http://arduiniana.org/libraries/tinygps/
-    
+
+void changeGPSConfiguration(uint8_t data[]) {
+  ss.write(data, sizeof(data));
+}
+
+
