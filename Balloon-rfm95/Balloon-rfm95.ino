@@ -382,7 +382,7 @@ void loop() {
         if (gps.encode(c)) // Did a new valid sentence come in?
             process_gps_values();
       }
-    } while (millis() - start < 3000); // if too high a value then system wil delay scheduled jobs and the send sequence will take too long
+    } while (millis() - start < 3000); // maybe make this 10 seconds too? // if too high a value then system wil delay scheduled jobs and the send sequence will take too long
      
     os_runloop_once();  // system picks up scheduled jobs
 
