@@ -123,6 +123,7 @@ SoftwareSerial ss(3, 2);  // RX, TX    to connect arduino RX, TX --> GPS TXD, RX
 boolean goToEnergySafeMode = false;
 long goToEnergySafeAfterMilliSeconds = 0;
 long fromNow = 0;
+int howManyTimes = 0;
 
 // event gets hooked into the system
 void onEvent (ev_t ev) {
@@ -504,10 +505,11 @@ void process_gps_values()
   #endif  
 
   // energy safe after number of seconds
-  if(GPS_values_are_valid) {
+  if(GPS_values_are_valid && howManyTimes == 0 // We wouldn't want to keep going to safe mode) {
     goToEnergySafeMode = true;
     goToEnergySafeAfterMilliSeconds = 60000;
     fromNow = millis();
+    howManyTimes++;
   }
 }
 
