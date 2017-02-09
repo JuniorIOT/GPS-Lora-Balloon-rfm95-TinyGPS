@@ -390,7 +390,7 @@ void loop() {
     if(goToEnergySafeMode)
     if(millis() - fromNow > goToEnergySafeAfterMilliSeconds) {
       uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the usb interval to every 10 seconds instead of every 1 second
-      changeGPSConfiguration(data);
+      ss.write(data, sizeof(data));
       goToEnergySafeMode = false;
     }
 }
@@ -614,8 +614,5 @@ void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNu
 //              where 1/10,000 degree is about 10 meters --> we'd like a finer grain so do not use get_position
 //           Alternative explanation is that it returns degrees * 1,000,000  http://arduiniana.org/libraries/tinygps/
 
-void changeGPSConfiguration(uint8_t data[]) {
-  ss.write(data, sizeof(data));
-}
 
 
