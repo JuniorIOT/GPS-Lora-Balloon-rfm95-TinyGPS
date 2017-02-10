@@ -25,7 +25,7 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
 ##Pin mapping
     Suggested pin mapping:
     this new mapping puts the boards next to each other as shown in schema below,
-          can be folded into compact stack with the 868 antenna outside the pile
+          can be folded into compact stack or embedded in a business card size
     -----------------------------------------------------------------------------
                             ║                 ║ USB to serial programmer
                             ║3.3 TX RX GND 5V ║ while programming, power comes
@@ -35,31 +35,31 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
                                │  │  x  │      ARDUINO pro mini (2 euro)
       GPS unit            ╔═╬══╬══╬══╬══╬══╬═╗ 8Mhz 32kb 3.3 volt
       NEO-6M              ║ G TX RX VCC GND B║
-      3.3 volt            ║                  ║    * marked ports are non-mappable
-      (10 euro)           ╬ TXD          RAW ╬x       others can be re-configured
-     ╔═══════════╗        ╬ RXD          GND ╬─gnd
-     ║           ║        ╬ RST          RST ╬x      x marked remains unconnected
-     ║     (PPS) ╬x       ╬ GND          VCC ╬─3.3v
-     ║       RXD ╬─────tx─╬ 2             A3 ╬────────────────────────────────┐
-     ║  ro)  TXD ╬─────rx─╬ 3             A2 ╬──────────────────────────────┐ │
-     ║       GND ╬─gnd    ╬ 4             A1 ╬────────────────────────────┐ │ │
-    ┌╬  lt   VCC ╬─3.3v   ╬ 5             A0 ╬────┐    ╔═══════════════╗  │ │ │
-    │║           ║        ╬ 6       (led) 13*╬────│─┐  ╬ GND      DIO2 ╬──┘ │ │
-    │╚═══════════╝        ╬ 7        MISO 12*╬────│─│──╬*MISO     DIO1 ╬────┘ │
-    │                     ╬ 8        MOSI 11*╬────│─│──╬*MOSI     DIO0 ╬──────┘
-    │ ┌─────────────┐     ╬ 9             10 ╬──┐ │ └──╬*SCK      3.3V ╬──3.3v
-    └─┤ gps antenna │     ║(GND A4 A5 A6 A7) ║  │ └────╬ NSS      DIO4 ╬x
-      └─────────────┘     ╚═══╬══╬══╬══╬══╬══╝  └──────╬ RESET    DIO3 ╬x
-                                                      x╬ DIO5      GND ╬gnd
-                                                    gnd╬ GND       ANT ╬──┐
-         power to    power to    power to              ╚═══════════════╝  │
-          GPS       arduino     RFM                     RFM95             │
-           | |       | |       | |                      3.3 volt         /////
-           └─|───────┴─|───────┴─|───────┐              (10 euro)        /////
-             └─────────┴─────────┴─────┐ │                               /////
-                                       - +                       helical /////
-                                JST female connector              868Mhz /////
-     power supply suggestions:                                   antenna /////
+      3.3 volt            ║                  ║                           ///////
+      (10 euro)           ╬ TXD          RAW ╬x                          helical
+     ╔═══════════╗        ╬ RXD          GND ╬───gnd                      868Mhz
+     ║           ║        ╬ RST          RST ╬x                          antenna
+     ║     (PPS) ╬x       ╬ GND          VCC ╬───3.3v                    ///////
+     ║       RXD ╬─────tx─╬ 2             A3 ╬────────────────┐              │
+     ║  ro)  TXD ╬─────rx─╬ 3             A2 ╬─────────────┐  │ 3.3V     GND │
+     ║       GND ╬─gnd    ╬ 4             A1 ╬──────────┐  │  │  │        │  │
+    ┌╬  lt   VCC ╬─3.3v   ╬ 5             A0 ╬──────┐ ╔═╬══╬══╬══╬══╬══╬══╬══╬═╗
+    │║           ║        ╬ 6       (led) 13*╬─────┐│ ║D2 D1 D0 3V D4 D3 GND ANT
+    │╚═══════════╝        ╬ 7        MISO 12*╬────┐│└───────────────┐          ║
+    │                     ╬ 8        MOSI 11*╬───┐│└─────────────┐  │ RFM95    ║
+    │ ┌─────────────┐     ╬ 9             10 ╬─┐ └│───────────┐  │  │ 3.3 volt ║
+    └─┤ gps antenna │     ║                  ║ │  └────────┐  │  │  │ (10 euro)║
+      └─────────────┘     ╚═══╬══╬══╬══╬══╬══╝ └───────────│──│──│──│──┐       ║
+                                                      ║    │  │  │  │  │       ║
+                                                      ╚═╬══╬══╬══╬══╬══╬══╬══╬═╝
+                                                      GND MI MO SCK NS RE D5 GND
+          GPS       arduino     RFM95
+           | |       | |       | |  
+           └─|───────┴─|───────┴─|───────┐  
+             └─────────┴─────────┴─────┐ │          
+                                       - +           
+                                JST female connector
+     power supply suggestions:           
 <<<<<<< HEAD
      - 1S lipo 3.7v with lipo protect and JST male connector
      - 2x AA battery -> JST male connector
@@ -67,7 +67,7 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
      - 2s lipo 7.4V -> lipo protect -> step down to 3.3v -> JST male connector
      - 5 volt from usb -> step down to 3.3 volt -> JST male connector
      - 9 volt or 12 volt battery -> step down to 3.3v -> JST male connector
-    ----------------------------------------------------------------------------- 
+    -----------------------------------------------------------------------------
 =======
      - 1S lipo 3.7v with lipo protect and JST male connector 
      - 2x AA battery -> JST male connector                          
@@ -75,5 +75,5 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
      - 2s lipo 7.4V -> lipo protect -> step down to 3.3 v -> JST male connector 
      - 5 volt from usb -> step down to 3.3 volt -> JST male connector          
      - 9 volt or 12 volt battery -> step down to 3.3 v -> JST male connector     
-    ----------------------------------------------------------------------------- 
+    -----------------------------------------------------------------------------
 >>>>>>> origin/master
