@@ -1,4 +1,4 @@
-# GPS-Lora-Balloon-rfm95-TinyGPS
+﻿# GPS-Lora-Balloon-rfm95-TinyGPS
 
 ##Libraries required
 - TinyGPS       https://github.com/mikalhart/TinyGPS
@@ -44,9 +44,9 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
      ║  ro)  TXD ╬─────rx─╬ 3             A2 ╬──────────────────────────────┐ │
      ║       GND ╬─gnd    ╬ 4             A1 ╬────────────────────────────┐ │ │
     ┌╬  lt   VCC ╬─3.3v   ╬ 5             A0 ╬────┐    ╔═══════════════╗  │ │ │
-    │║           ║        ╬ 6       (led) 13*╬────│─┐  ╬ GND      DIO2 ╬──│─│─┘
-    │╚═══════════╝        ╬ 7        MISO 12*╬────│─│──╬*MISO     DIO1 ╬──│─┘
-    │                     ╬ 8        MOSI 11*╬────│─│──╬*MOSI     DIO0 ╬──┘
+    │║           ║        ╬ 6       (led) 13*╬────│─┐  ╬ GND      DIO2 ╬──┘ │ │
+    │╚═══════════╝        ╬ 7        MISO 12*╬────│─│──╬*MISO     DIO1 ╬────┘ │
+    │                     ╬ 8        MOSI 11*╬────│─│──╬*MOSI     DIO0 ╬──────┘
     │ ┌─────────────┐     ╬ 9             10 ╬──┐ │ └──╬*SCK      3.3V ╬──3.3v
     └─┤ gps antenna │     ║(GND A4 A5 A6 A7) ║  │ └────╬ NSS      DIO4 ╬x
       └─────────────┘     ╚═══╬══╬══╬══╬══╬══╝  └──────╬ RESET    DIO3 ╬x

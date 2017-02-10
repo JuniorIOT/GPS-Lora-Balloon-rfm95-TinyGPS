@@ -7,27 +7,9 @@
  * including, but not limited to, copying, modification and redistribution.
  * NO WARRANTY OF ANY KIND IS PROVIDED.
  *
- * This example sends a valid LoRaWAN packet with payload "Hello,
- * world!", using frequency and encryption settings matching those of
- * the The Things Network.
+ * Do not forget to define the radio type correctly in config.h. in lmic library
  *
- * This uses ABP (Activation-by-personalisation), where a DevAddr and
- * Session keys are preconfigured (unlike OTAA, where a DevEUI and
- * application key is configured, while the DevAddr and session keys are
- * assigned/generated in the over-the-air-activation procedure).
- *
- * Note: LoRaWAN per sub-band duty-cycle limitation is enforced (1% in
- * g1, 0.1% in g2), but not the TTN fair usage policy (which is probably
- * violated by this sketch when left running for longer)!
- *
- * To use this sketch, first register your application and device with
- * the things network, to set or generate a DevAddr, NwkSKey and
- * AppSKey. Each device should have their own unique values for these
- * fields.
- *
- * Do not forget to define the radio type correctly in config.h.
- *
- * Modified By DenniZr - First test version, did not test it on the hardware yet!!!
+ * Modified By DenniZr - First test version
  *******************************************************************************/
 
  // TODO: investigate OTAA, good description here: Moteino, LMIC and OTAA Walkthrough https://github.com/lukastheiler/ttn_moteino
@@ -39,8 +21,8 @@
 // TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
 // TODO: each few messages, send one at high power
 
-#define DEBU //G     // if DEBUG is defined, some code is added to display some basic debug info
-#define DE //BUG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
+#define DEBUG     // if DEBUG is defined, some code is added to display some basic debug info
+#define DEB // UG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
 
 #include <lmic.h>
 #include <hal/hal.h>
@@ -63,8 +45,8 @@ void os_getDevKey (u1_t* buf) { }
 
 //uint8_t mydata[9];   // mydata[9] allows you to read and write to mydata[0] .. mydata[8]. Higher numbers work but are invalid.
 uint8_t mydata[14];  // a few bytes added to the memory buffer to play with
-//const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
-const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttnonsole
+const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
+//const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttnonsole
 
 static osjob_t sendjob;
 
@@ -112,13 +94,12 @@ const lmic_pinmap lmic_pins = {
     .nss = 14,                 // mapping for NSS, was: 10, new: 14=A0 (is digital 14)
     .rxtx = LMIC_UNUSED_PIN,
     .rst = 10,                  // mapping for reset. was: 5, new: 10
-    .dio = {15, 16, 17},          // mapping for DIO0, DIO1, DIO2  was: 2, 3, 4  new: A1=15, A2=16, A3=17
+    .dio = {17, 16, 15},          // mapping for DIO0, DIO1, DIO2  was: 2, 3, 4  on mobile tester: A1=15, A2=16, A3=17 on businesscard 17, 16, 15
 };
 
 
 TinyGPS gps;
-SoftwareSerial ss(3, 2);  // RX, TX    to connect arduino RX, TX --> GPS TXD, RXD    was 8, 9; new: 3, 2
-//SoftwareSerial ss(9, 8);    // or try if wires have been reversed, can be tested by reviewing output in serial/debug window
+SoftwareSerial ss(3, 2);  // ss RX, TX --> GPS TXD, RXD
 
 boolean goToEnergySafeMode = false;
 long goToEnergySafeAfterMilliSeconds = 0;
@@ -338,20 +319,13 @@ void setup() {
     
     Serial.println();
     Serial.println();
-    Serial.println("Junior Balloon RFM95 Starting ");
+    Serial.println("Junior Internet of Things RFM95 Starting ");
     Serial.print("Simple TinyGPS library v. "); Serial.println(TinyGPS::library_version());
     Serial.println();
   
     // GPS serial
     ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
                             // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
-
-    #ifdef VCC_ENABLE
-      // For Pinoccio Scout boards
-      pinMode(VCC_ENABLE, OUTPUT);
-      digitalWrite(VCC_ENABLE, HIGH);
-      delay(1000);
-    #endif
 
     lmic_init();  // code moved to sub as per example JP
     
@@ -362,12 +336,11 @@ void setup() {
             
 }
 
-//bool blink_on = false;
 void loop() {
     
     // process the serial feed from GPS module
     Serial.println(" ");
-    //Serial.println("Read GPS... ");
+    Serial.println("Read GPS... ");
     char c;
     unsigned long start = millis();
     do 
@@ -375,6 +348,7 @@ void loop() {
       while (ss.available())
       {
         char c = ss.read();
+        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         #ifdef DEBUG_XL
         Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         #endif
@@ -423,11 +397,6 @@ void process_gps_values()
   //show me something
   #ifdef DEBUG
   // keep some values out as seems to take performance and/or make for code to miss GPS sentences
-  //unsigned long chars = 0;
-  //unsigned short sentences = 0, failed = 0;
-  //uint32_t sat; 
-  //gps.stats(&chars, &sentences, &failed);
-  //sat = gps.satellites();
   
   Serial.println();
   Serial.print("Data: ");
@@ -449,19 +418,27 @@ void process_gps_values()
   Serial.print( alt );
   Serial.print(" AGE=");
   Serial.print(age);
-  //Serial.print(" SAT=");
-  //Serial.print( sat);
-  
-  //  Serial.print(" CHARS=");
-  //  Serial.print(chars);
-  //Serial.print(" SENT=");
-  //Serial.print(sentences);
-  //Serial.print(" ERR=");
-  //Serial.print(failed);
   Serial.println("");
   #endif
   
   #ifdef DEBUG_XL
+  unsigned long chars = 0;
+  unsigned short sentences = 0, failed = 0;
+  gps.stats(&chars, &sentences, &failed);
+  
+  Serial.print(" CHARS=");
+  Serial.print(chars);
+  Serial.print(" SENT=");
+  Serial.print(sentences);
+  Serial.print(" ERR=");
+  Serial.print(failed);
+  
+  //uint32_t sat; 
+  //sat = gps.satellites();
+  
+  //Serial.print(" SAT=");
+  //Serial.print( sat);
+  
   if (chars == 0)
     Serial.println("** No characters from GPS: check wiring **");
   else if (age > 5000)
