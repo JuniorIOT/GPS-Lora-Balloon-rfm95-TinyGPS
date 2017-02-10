@@ -19,138 +19,60 @@
  // ACTION: made function to configure GPS, the u-center software can be used to make the configurations you want. See: https://www.youtube.com/watch?v=iWd0gCOYsdo
 // todo: if no good read from GPS in last 2 minutes, then reset arduino as a manual reset fixes the problem?? Or auto-reset every 120 minutes. investigate
 // TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
-// TODO: each few messages, send one at high power
-
 
 #define DEBUG     // if DEBUG is defined, some code is added to display some basic debug info
 #define DEB // UG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
 
+//////////////////////////////////////////////
+// GPS libraries, mappings and things
+//////////////////////////////////////////////
+#include <SoftwareSerial.h> 
+#include <TinyGPS.h>
+//#include "libraries_adjusted/TinyGPS_adjusted_kaasfabriek/TinyGPS.h"   // <TinyGPS.h>
+SoftwareSerial ss(3, 2);  // ss RX, TX --> GPS TXD, RXD
+TinyGPS gps;
+
+bool GPS_values_are_valid = true;
+boolean  gpsEnergySavingWantsToActivate = false;
+long  gpsEnergySavingStartDelayMillis = 60000;
+long  gpsEnergySavingWantsToActivateStartTime = 0;
+int  gpsEnergySavingActivated = false;
+
+//////////////////////////////////////////////
+// LMIC and RFM95 mapping and things
+//////////////////////////////////////////////
 #include <lmic.h>
 #include <hal/hal.h>
 //#include "libraries_adjusted/lmic_adjusted_kaasfabriek/lmic/lmic.h" //<lmic.h>
 //#include "libraries_adjusted/lmic_adjusted_kaasfabriek/hal/hal.h"  // <hal/hal.h>
-
-#include <SPI.h>
-#include <SoftwareSerial.h>  
-#include <TinyGPS.h>
-//#include "libraries_adjusted/TinyGPS_adjusted_kaasfabriek/TinyGPS.h"   // <TinyGPS.h>
-
+#include <SPI.h>  //MISO MOSI SCK stuff
 #include "keys.h"  // the personal keys to identify our own nodes
-
-// LoRaWAN NwkSKey, network session key
-
-// These callbacks are only used in over-the-air activation, so they are
-// left empty here (we cannot leave them out completely unless
-// This is the default Semtech key, which is used by the early prototype TTN
-// network.
-
-// DISABLE_JOIN is set in config.h, otherwise the linker will complain).
-void  os_getArtEui (u1_t* buf) { }
-void  os_getDevEui (u1_t* buf) { }
-void  os_getDevKey (u1_t* buf) { } 
-
-//uint8_t mydata[9];   // mydata[9] allows you to read and write to mydata[0] .. mydata[8]. Higher numbers work but are invalid.
-uint8_t  mydata[14];  // a few bytes added to the memory buffer to play with
-const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
-//const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttnonsole
-
-static  osjob_t sendjob;
-
 const unsigned  TX_INTERVAL = 250;  // transmit interval
 dr_t LMIC_DR_sequence[] = {DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
 int  LMIC_DR_sequence_count = 12;
 int  LMIC_DR_sequence_index = 0;
 
-// Pin mapping, adjusted to get wires to same side as NISO & NOSI
-const  lmic_pinmap lmic_pins = {
-    .nss = 14,                 // mapping for NSS, was: 10, new: 14=A0 (is digital 14)
-    .rxtx = LMIC_UNUSED_PIN,
-    .rst = 10,                  // mapping for reset. was: 5, new: 10
-    .dio = {17, 16, 15},          // mapping for DIO0, DIO1, DIO2  was: 2, 3, 4  on mobile tester: A1=15, A2=16, A3=17 on businesscard 17, 16, 15
-};
+const  lmic_pinmap lmic_pins = { .nss = 14,    .rxtx = LMIC_UNUSED_PIN,    .rst = 10,    .dio = {17, 16, 15}, };
 
+uint8_t  mydata[14];  // mydata[9] allows for GPS location. a few bytes added to the memory buffer to play with
+const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
+//const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttnonsole
 
- TinyGPS gps;
- SoftwareSerial ss(3, 2);  // ss RX, TX --> GPS TXD, RXD
+static  osjob_t sendjob;
 
-boolean  goToEnergySafeMode = false;
-long  goToEnergySafeAfterMilliSeconds = 0;
-long  EnergySaveStartTime = 0;
-int  howManyTimes = 0;
+// os_ interfaces for callbacks only used in over-the-air activation, so functions can be left empty here
+void  os_getArtEui (u1_t* buf) { }
+void  os_getDevEui (u1_t* buf) { }
+void  os_getDevKey (u1_t* buf) { } 
 
-
-
-
-#include "kaasfabriek_gps.cpp"
-
+#include "kaasfabriek_gps.cpp"      // 
 #include "kaasfabriek_rfm95.cpp"
 
 
-void setup() {
-    Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
-    
-    // load the send buffer with dummy location 0,0. This location 0,0 is recognized as dummy by TTN Mapper and will be ignored
-    put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
-    
-    Serial.println();
-    Serial.println();
-    Serial.println("Junior Internet of Things RFM95 Starting ");
-    Serial.print("Simple TinyGPS library v. "); Serial.println(TinyGPS::library_version());
-    Serial.println();
-  
-    // GPS serial
-    ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
-                            // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
 
-    lmic_init();  // code moved to sub as per example JP
-    
-    // Start job
-    //do_send(&sendjob);
-    // Start job delayed so system can look at GPS first
-    os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(5), do_send);
-            
-}
-
-void loop() {
-    
-    // process the serial feed from GPS module
-    Serial.println(" ");
-    Serial.println("Read GPS... ");
-    char c;
-    unsigned long start = millis();
-    do 
-    {   
-      while (ss.available())
-      {
-        char c = ss.read();
-        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
-        #ifdef DEBUG_XL
-        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
-        #endif
-        
-        if (gps.encode(c)) // Did a new valid sentence come in?
-            process_gps_values();
-      }
-    } while (millis() - start < 3000); // maybe make this 10 seconds too? // if too high a value then system wil delay scheduled jobs and the send sequence will take too long
-     
-    os_runloop_once();  // system picks up scheduled jobs
-
-    
-    // Energy safe mode?
-    if(goToEnergySafeMode)
-      if(millis() - EnergySaveStartTime > goToEnergySafeAfterMilliSeconds) {
-        uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the usb interval to every 10 seconds instead of every 1 second
-        ss.write(data, sizeof(data));
-        goToEnergySafeMode = false;
-      }
-}
-
-
-
-  //////////////////////////////////////////////////////////
-  //
-// Kaasfabriek routines for gps
-//
+//////////////////////////////////////////////////////////
+//// Kaasfabriek routines for gps
+////////////////////////////////////////////
 
 
 
@@ -195,7 +117,7 @@ void process_gps_values()
   hdopNumber = gps.hdop();   // int 100ths of a meter
 
   // check if possibly invalid
-  bool GPS_values_are_valid = true;
+  GPS_values_are_valid = true;
   if (flat == TinyGPS::GPS_INVALID_F_ANGLE)    GPS_values_are_valid = false;
   if (flon == TinyGPS::GPS_INVALID_F_ANGLE)    GPS_values_are_valid = false;
   if (hdopNumber == TinyGPS::GPS_INVALID_HDOP) GPS_values_are_valid = false;
@@ -294,16 +216,7 @@ void process_gps_values()
   if (message_size>9) Serial.print( mydata[10], HEX );
   Serial.println("]");
   #endif    
-  
-  // energy safe after number of seconds
-  if(GPS_values_are_valid && howManyTimes == 0 ) {  // We wouldn't want to keep going to safe mode
-    goToEnergySafeMode = true;
-    goToEnergySafeAfterMilliSeconds = 60000;
-    EnergySaveStartTime = millis();
-    howManyTimes++;
-  }
 }
-
 
 
 
@@ -381,10 +294,8 @@ void process_gps_values()
 
 
 //////////////////////////////////////////////////
-
-//
 // Kaasfabriek routines for rfm95
-//
+///////////////////////////////////////////////
 
 
 // do_send call is scheduled in event handler
@@ -452,7 +363,6 @@ void do_send(osjob_t* j){
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
-
 
 
 // event gets hooked into the system
@@ -632,4 +542,77 @@ void lmic_init()
 //        Total 12 messages in one hour. 
 //        interval 5 minutes, message stream: DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9 
 //  let's build and test scenario (d)  with interval at 5 min = 300 sec (setting at 250)
- 
+
+
+///////////////////////////////////////////////
+//  arduino init and main
+///////////////////////////////////////////
+
+
+void setup() {
+    Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
+    
+    // load the send buffer with dummy location 0,0. This location 0,0 is recognized as dummy by TTN Mapper and will be ignored
+    put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
+    
+    Serial.println("\n\nJunior Internet of Things RFM95 Starting ");
+    Serial.print("Simple TinyGPS library v. "); Serial.println(TinyGPS::library_version());
+    Serial.println();
+  
+    // GPS serial
+    ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
+                            // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
+
+    lmic_init();  // code moved to sub as per example JP
+    
+    // Start job
+    //do_send(&sendjob);
+    // Start job delayed so system can look at GPS first
+    os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(5), do_send);
+            
+}
+
+void loop() {
+    
+    // process the serial feed from GPS module
+    Serial.println("\nRead GPS... ");
+    char c;
+    unsigned long start = millis();
+    do {   
+      while (ss.available()) {
+        char c = ss.read();
+        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        #ifdef DEBUG_XL
+        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        #endif
+        
+        if (gps.encode(c)) { // Did a new valid sentence come in?
+            process_gps_values();
+            
+            // allow energy saving mode only if a fix has been achieved
+            if(GPS_values_are_valid && !gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) { 
+              gpsEnergySavingWantsToActivate = true;
+              gpsEnergySavingWantsToActivateStartTime = millis();
+            }  
+         }          
+      }
+    } while (millis() - start < 3000); // explanation:
+       // keep xxxx millis focussed on reading the ss. the datablurp will be less than one second
+       // a 3 second focus also works great if gps is in power saving mode
+       // if too low a value the gps blurp of data will be interrupted and incomplete due conflicting system interrupts
+       // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
+     
+    os_runloop_once();  // system picks up just the fisrst job from all scheduled jobs
+
+    // can we go into energy saving mode yet?
+    if(gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) {
+      if(millis() - gpsEnergySavingWantsToActivateStartTime > gpsEnergySavingStartDelayMillis) {
+        uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the usb interval to every 10 seconds instead of every 1 second
+        ss.write(data, sizeof(data));
+        
+        gpsEnergySavingWantsToActivate = false;
+        gpsEnergySavingActivated = true;
+      }
+    }
+}
+
