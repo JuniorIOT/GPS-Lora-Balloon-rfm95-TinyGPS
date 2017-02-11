@@ -12,13 +12,16 @@
  * Modified By DenniZr - First test version
  *******************************************************************************/
  
- // TODO: investigate OTAA, good description here: Moteino, LMIC and OTAA Walkthrough https://github.com/lukastheiler/ttn_moteino
- // ACTION: OTAA test code can be tested on device
+ // done: investigate OTAA, good description here: Moteino, LMIC and OTAA Walkthrough https://github.com/lukastheiler/ttn_moteino
+ // TODO: OTAA test code can be tested on device
+ // TODO: Disable radio listening. 
+ 
  // TODO: add GPS flightmode. Good test script seems available here:  https://ukhas.org.uk/guides:ublox6
- // TODO: GPS powersafe. https://ukhas.org.uk/guides:ublox_psm
- // ACTION: made function to configure GPS, the u-center software can be used to make the configurations you want. See: https://www.youtube.com/watch?v=iWd0gCOYsdo
-// todo: if no good read from GPS in last 2 minutes, then reset arduino as a manual reset fixes the problem?? Or auto-reset every 120 minutes. investigate
-// TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
+ // done: GPS power save. The u-center software can be used to make the configurations you want. See: https://www.youtube.com/watch?v=iWd0gCOYsdo
+ // TODO: if no good read from GPS in last 2 minutes, then reset arduino as a manual reset fixes the problem?? Or auto-reset every 120 minutes. investigate
+  
+ // TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
+ // TODO: Create and apply new device ID
 
 #define DEBUG     // if DEBUG is defined, some code is added to display some basic debug info
 #define DEB // UG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
@@ -33,10 +36,10 @@ SoftwareSerial ss(3, 2);  // ss RX, TX --> GPS TXD, RXD
 TinyGPS gps;
 
 bool GPS_values_are_valid = true;
-boolean  gpsEnergySavingWantsToActivate = false;
-long  gpsEnergySavingStartDelayMillis = 60000;
+boolean  gpsEnergySavingWantsToActivate = false;      // this is set to true once gps fix is found
+long  gpsEnergySavingStartDelayMillis = 15000;        // Device starts in normal mode. Energy saving is started xx time after a gps fix was found.
 long  gpsEnergySavingWantsToActivateStartTime = 0;
-int  gpsEnergySavingActivated = false;
+int  gpsEnergySavingActivated = false;                // this is set to true once energy saving is activated
 
 //////////////////////////////////////////////
 // LMIC and RFM95 mapping and things
@@ -556,7 +559,7 @@ void setup() {
     put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
     
     Serial.println("\n\nJunior Internet of Things RFM95 Starting ");
-    Serial.print("Simple TinyGPS library v. "); Serial.println(TinyGPS::library_version());
+    Serial.print("This device is "); Serial.print(myDeviceName); Serial.print(" ("); Serial.print(DEVADDR); Serial.println(") ");
     Serial.println();
   
     // GPS serial
@@ -591,12 +594,13 @@ void loop() {
             
             // allow energy saving mode only if a fix has been achieved
             if(GPS_values_are_valid && !gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) { 
+              Serial.println("\nFirst gps fix found, counting down to switch to Energy Saving. ");
               gpsEnergySavingWantsToActivate = true;
               gpsEnergySavingWantsToActivateStartTime = millis();
             }  
          }          
       }
-    } while (millis() - start < 3000); // explanation:
+    } while (millis() - start < 5000); // explanation:
        // keep xxxx millis focussed on reading the ss. the datablurp will be less than one second
        // a 3 second focus also works great if gps is in power saving mode
        // if too low a value the gps blurp of data will be interrupted and incomplete due conflicting system interrupts
@@ -607,6 +611,7 @@ void loop() {
     // can we go into energy saving mode yet?
     if(gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) {
       if(millis() - gpsEnergySavingWantsToActivateStartTime > gpsEnergySavingStartDelayMillis) {
+        Serial.println("\nGwitching GPS to Energy Saving. ");
         uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the usb interval to every 10 seconds instead of every 1 second
         ss.write(data, sizeof(data));
         

@@ -32,48 +32,32 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
                             ╚══╬══╬══╬══╬══╬══╝ from external supply to get
                                x  │  │  │  x    enough current for GPS
                                ┌──│──┘  │
-                               │  │  x  │      ARDUINO pro mini (2 euro)
-      GPS unit            ╔═╬══╬══╬══╬══╬══╬═╗ 8Mhz 32kb 3.3 volt
-      NEO-6M              ║ G TX RX VCC GND B║
-      3.3 volt            ║                  ║                           ///////
-      (10 euro)           ╬ TXD          RAW ╬x                          helical
-     ╔═══════════╗        ╬ RXD          GND ╬───gnd                      868Mhz
-     ║           ║        ╬ RST          RST ╬x                          antenna
-     ║     (PPS) ╬x       ╬ GND          VCC ╬───3.3v                    ///////
-     ║       RXD ╬─────tx─╬ 2             A3 ╬────────────────┐              │
-     ║  ro)  TXD ╬─────rx─╬ 3             A2 ╬─────────────┐  │ 3.3V     GND │
-     ║       GND ╬─gnd    ╬ 4             A1 ╬──────────┐  │  │  │        │  │
-    ┌╬  lt   VCC ╬─3.3v   ╬ 5             A0 ╬──────┐ ╔═╬══╬══╬══╬══╬══╬══╬══╬═╗
-    │║           ║        ╬ 6       (led) 13*╬─────┐│ ║D2 D1 D0 3V D4 D3 GND ANT
-    │╚═══════════╝        ╬ 7        MISO 12*╬────┐│└───────────────┐          ║
-    │                     ╬ 8        MOSI 11*╬───┐│└─────────────┐  │ RFM95    ║
-    │ ┌─────────────┐     ╬ 9             10 ╬─┐ └│───────────┐  │  │ 3.3 volt ║
-    └─┤ gps antenna │     ║                  ║ │  └────────┐  │  │  │ (10 euro)║
-      └─────────────┘     ╚═══╬══╬══╬══╬══╬══╝ └───────────│──│──│──│──┐       ║
-                                                      ║    │  │  │  │  │       ║
+                               │  │  x  │      ARDUINO pro mini
+                          ╔═╬══╬══╬══╬══╬══╬═╗ 8Mhz 32kb                 ///////
+      GPS unit            ║ G TX RX VCC GND B║ 3.3 volt                  helical
+      NEO-6M              ║                  ║            gnd            868Mhz
+      3.3 volt            ╬ TXD          RAW ╬x            │ 3v          antenna
+     ╔═══════╗            ╬ RXD          GND ╬─black─60mm──┘ │           ///////
+     ║       ║            ╬ RST          RST ╬x              │               │
+     ║ (PPS) ╬x           ╬ GND          VCC ╬─red─48mm──────┘    3v   gnd   │
+     ║   RXD ╬──pink─15mm─╬ 2 tx          A3 ╬───white─20mm───┐  red48  │    │
+     ║   TXD ╬──brn─15mm──╬ 3 rx          A2 ╬──gray─16mm──┐  │  ┌─┘   blk60 │
+     ║   GND ╬─blk30──┐   ╬ 4             A1 ╬─pur─14───┐  │  │  │      └─┐  │
+    ┌╬   VCC ╬─red35┐ │   ╬ 5             A0 ╬──────┐ ╔═╬══╬══╬══╬══╬══╬══╬══╬═╗
+    │║       ║      │ │   ╬ 6       (led) 13*╬─────┐│ ║D2 D1 D0 3V D4 D3 GND ANT
+    │╚═══════╝     3v │   ╬ 7        MISO 12*╬────┐│└──pink─18mm────┐          ║
+    │                gnd  ╬ 8        MOSI 11*╬───┐│└──ora─20mm───┐  │ RFM95    ║
+    │                     ╬ 9             10 ╬─┐ └│──yel─23mm─┐  │  │ 3.3 volt ║
+    │ ┌─────────────┐     ║                  ║ │  └─grn─27─┐  │  │  │ (10 euro)║
+    └─┤ gps antenna │     ╚═══╬══╬══╬══╬══╬══╝ └──blue─22──│──│──│──│──┐       ║
+      └─────────────┘                                 ║    │  │  │  │  │       ║
                                                       ╚═╬══╬══╬══╬══╬══╬══╬══╬═╝
                                                       GND MI MO SCK NS RE D5 GND
-          GPS       arduino     RFM95
-           | |       | |       | |  
-           └─|───────┴─|───────┴─|───────┐  
-             └─────────┴─────────┴─────┐ │          
-                                       - +           
-                                JST female connector
-     power supply suggestions:           
-<<<<<<< HEAD
-     - 1S lipo 3.7v with lipo protect and JST male connector
-     - 2x AA battery -> JST male connector
-     - 1S lipo 3.7v -> lipo protect -> JST male connector
-     - 2s lipo 7.4V -> lipo protect -> step down to 3.3v -> JST male connector
-     - 5 volt from usb -> step down to 3.3 volt -> JST male connector
-     - 9 volt or 12 volt battery -> step down to 3.3v -> JST male connector
-    -----------------------------------------------------------------------------
-=======
-     - 1S lipo 3.7v with lipo protect and JST male connector 
-     - 2x AA battery -> JST male connector                          
-     - 1S lipo 3.7v -> lipo protect -> JST male connector                     
-     - 2s lipo 7.4V -> lipo protect -> step down to 3.3 v -> JST male connector 
-     - 5 volt from usb -> step down to 3.3 volt -> JST male connector          
-     - 9 volt or 12 volt battery -> step down to 3.3 v -> JST male connector     
-    -----------------------------------------------------------------------------
->>>>>>> origin/master
+    GPS arduino RFM95       LIPO Protect
+    | |   | |    | |         ╔═══════╗        switch               ╔═════════╗
+    └─|───┴─|────┴─|─3x─red──╬3v   B+╬─┬─red17─╣/╠──red─lipo─30mm──╬+  1 CELL║
+      └─────┴──────┴3x─black─╬gnd  B-╬─│─┬─────────black─lipo─??mm─╬-  LIPO  ║
+                             ╚═══════╝ │ │                         ╚═════════╝
+                                      JST female connector
+                                      to LiPo charger with protect
+         
