@@ -51,15 +51,19 @@ int  gpsEnergySavingActivated = false;                // this is set to true onc
 #include <SPI.h>  //MISO MOSI SCK stuff
 #include "keys.h"  // the personal keys to identify our own nodes
 const unsigned  TX_INTERVAL = 250;  // transmit interval
-dr_t LMIC_DR_sequence[] = {DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
+dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
 int  LMIC_DR_sequence_count = 12;
 int  LMIC_DR_sequence_index = 0;
-
 const  lmic_pinmap lmic_pins = { .nss = 14,    .rxtx = LMIC_UNUSED_PIN,    .rst = 10,    .dio = {17, 16, 15}, };
 
 uint8_t  mydata[14];  // mydata[9] allows for GPS location. a few bytes added to the memory buffer to play with
-const unsigned message_size = 9;  // 9 bytes are needed into the ttn tracker service
-//const unsigned message_size =11; //sending too large message makes the ttntracker ignore it, allowing us to see payload at ttnonsole
+const unsigned message_size = 11;  // 9 bytes are needed into the ttn tracker service
+// byte 0, 1, 2      Latitude     -90 to +90 rescaled to 0 - 16777215
+// byte 3, 4, 5      Longitude    -180 to + 180 rescaled to 0 - 16777215
+// byte 6, 7         Altitude     2 bytes in meters
+// byte 8            GPS DoP      1 byte
+// byte 9            Arduino VCC  1 byte in 50ths Volt
+// byte 10           cpu temp     1 byte -100 to 155 scaled to 0 - 255
 
 static  osjob_t sendjob;
 
@@ -68,16 +72,10 @@ void  os_getArtEui (u1_t* buf) { }
 void  os_getDevEui (u1_t* buf) { }
 void  os_getDevKey (u1_t* buf) { } 
 
-#include "kaasfabriek_gps.cpp"      // 
-#include "kaasfabriek_rfm95.cpp"
-
-
 
 //////////////////////////////////////////////////////////
 //// Kaasfabriek routines for gps
 ////////////////////////////////////////////
-
-
 
 void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNumber)
 {    
@@ -102,11 +100,7 @@ void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNu
 
   // hdop in tenths of meter
   mydata[8] = accuracy & 0xFF;
-  
-  mydata[9] = 0;  // fill up next bytes in buffer, just for play. As-if null terminated string.
-  mydata[10] = 0xFF;  // dummy filler byte
 }
-
 
 void process_gps_values()
 { 
@@ -217,6 +211,10 @@ void process_gps_values()
   if (message_size>8) Serial.print( mydata[9], HEX );
   if (message_size>9) Serial.print(" ");
   if (message_size>9) Serial.print( mydata[10], HEX );
+  if (message_size>10) Serial.print(" ");
+  if (message_size>10) Serial.print( mydata[11], HEX );
+  if (message_size>11) Serial.print(" ");
+  if (message_size>11) Serial.print( mydata[12], HEX );
   Serial.println("]");
   #endif    
 }
@@ -300,7 +298,6 @@ void process_gps_values()
 // Kaasfabriek routines for rfm95
 ///////////////////////////////////////////////
 
-
 // do_send call is scheduled in event handler
 void do_send(osjob_t* j){  
   // starting vesion was same as https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
@@ -330,14 +327,18 @@ void do_send(osjob_t* j){
         Serial.print( mydata[5], HEX );
         Serial.print(" ");
         Serial.print( mydata[6], HEX );
+        if (message_size>6) Serial.print(" ");
+        if (message_size>6) Serial.print( mydata[7], HEX );
         if (message_size>7) Serial.print(" ");
-        if (message_size>7) Serial.print( mydata[7], HEX );
-        if (message_size>8) Serial.print(" ");
-        if (message_size>8) Serial.print( mydata[8], HEX );
-        if (message_size>9) Serial.print(" / ");
-        if (message_size>9) Serial.print( mydata[9], HEX );
+        if (message_size>7) Serial.print( mydata[8], HEX );
+        if (message_size>8) Serial.print(" / ");
+        if (message_size>8) Serial.print( mydata[9], HEX );
+        if (message_size>9) Serial.print(" ");
+        if (message_size>9) Serial.print( mydata[10], HEX );
         if (message_size>10) Serial.print(" ");
-        if (message_size>10) Serial.print( mydata[10], HEX );
+        if (message_size>10) Serial.print( mydata[11], HEX );
+        if (message_size>11) Serial.print(" ");
+        if (message_size>11) Serial.print( mydata[12], HEX );
         Serial.print("]    ");
         
         Serial.print("DR [ ");
@@ -435,7 +436,6 @@ void onEvent (ev_t ev) {
     }
 }
 
-
 void lmic_init()
 {
     // LMIC init
@@ -505,13 +505,7 @@ void lmic_init()
 
     // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
     LMIC_setDrTxpow(DR_SF7,14);   // void LMIC_setDrTxpow (dr_t dr, s1_t txpow)... Set data rate and transmit power. Should only be used if data rate adaptation is disabled.
-
 }
-
-
-
-
-
 
 // Schedule TX event every this many seconds (might become longer due to duty cycle limitations).
 // https://www.thethingsnetwork.org/forum/t/limitations-data-rate-packet-size-30-seconds-uplink-and-10-messages-downlink-per-day-fair-access-policy/1300
@@ -546,11 +540,67 @@ void lmic_init()
 //        interval 5 minutes, message stream: DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9 
 //  let's build and test scenario (d)  with interval at 5 min = 300 sec (setting at 250)
 
+///////////////////////////////////////////////
+//  some other measurements
+///////////////////////////////////////////
+
+double GetTemp(void)  //http://playground.arduino.cc/Main/InternalTemperatureSensor
+{
+  unsigned int wADC;
+  double t;
+  
+  // The internal temperature has to be used with the internal reference of 1.1V.
+  // Set the internal reference and mux.
+  ADMUX = (_BV(REFS1) | _BV(REFS0) | _BV(MUX3));
+  ADCSRA |= _BV(ADEN);  // enable the ADC
+  delay(20);            // wait for voltages to become stable.
+  ADCSRA |= _BV(ADSC);  // Start the ADC
+
+  // Detect end-of-conversion
+  while (bit_is_set(ADCSRA,ADSC));  
+  // Reading register "ADCW" takes care of how to read ADCL and ADCH.
+  wADC = ADCW;
+  // The offset of 324.31 could be wrong. It is just an indication.
+  t = (wADC - 324.31 ) / 1.22;
+  // The returned temperature is in degrees Celsius.
+  return (t);
+}
+
+long readVcc() {  //http://dumbpcs.blogspot.nl/2013/07/arduino-secret-built-in-thermometer.html
+  long result;
+  // Read 1.1V reference against AVcc
+  ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+  delay(2); // Wait for Vref to settle
+  ADCSRA |= _BV(ADSC); // Convert
+  while (bit_is_set(ADCSRA,ADSC));
+  result = ADCL;
+  result |= ADCH<<8;
+  result = 1126400L / result; // Back-calculate AVcc in mV
+  return result;
+}
+
+void put_other_values_into_sendbuffer() {
+  long vcc = readVcc();
+  uint8_t vccBinary = vcc /20 ;  // rescale 0-5100 milli volt into 0 - 255 values
+  mydata[9] = vccBinary;
+  Serial.print("Vcc = ");
+  Serial.print(vcc);
+  Serial.print(" milli Volt. vccBinary = ");
+  Serial.print(vccBinary);
+
+  double temperature = GetTemp();
+  uint8_t temperatureBinary = temperature + 100;   // rescale -100 to 155 into 0 - 255 values
+  mydata[10] = temperatureBinary;
+  Serial.print(" Temperature = ");
+  Serial.print(temperature);
+  Serial.print(" temperatureBinary = ");
+  Serial.println(temperatureBinary);
+}
+
 
 ///////////////////////////////////////////////
 //  arduino init and main
 ///////////////////////////////////////////
-
 
 void setup() {
     Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
@@ -572,11 +622,9 @@ void setup() {
     //do_send(&sendjob);
     // Start job delayed so system can look at GPS first
     os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(5), do_send);
-            
 }
 
 void loop() {
-    
     // process the serial feed from GPS module
     Serial.println("\nRead GPS... ");
     char c;
@@ -584,7 +632,7 @@ void loop() {
     do {   
       while (ss.available()) {
         char c = ss.read();
-        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         #ifdef DEBUG_XL
         Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         #endif
@@ -601,11 +649,12 @@ void loop() {
          }          
       }
     } while (millis() - start < 5000); // explanation:
-       // keep xxxx millis focussed on reading the ss. the datablurp will be less than one second
-       // a 3 second focus also works great if gps is in power saving mode
-       // if too low a value the gps blurp of data will be interrupted and incomplete due conflicting system interrupts
-       // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
-     
+    // keep xxxx millis focussed on reading the ss. the datablurp will be less than one second
+    // a 3 second focus also works great if gps is in power saving mode
+    // if too low a value the gps blurp of data will be interrupted and incomplete due conflicting system interrupts
+    // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
+
+    put_other_values_into_sendbuffer();
     os_runloop_once();  // system picks up just the fisrst job from all scheduled jobs
 
     // can we go into energy saving mode yet?

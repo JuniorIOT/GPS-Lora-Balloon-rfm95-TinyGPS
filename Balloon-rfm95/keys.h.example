@@ -12,6 +12,9 @@
 //  const char *nwkSKey = "3344556677889900AABBCCDDEEFF0011";
 //  const char *appSKey = "DDEEFF00112233445566778899AABBCC
 //---------------------------------
-//static const u4_t DEVADDR = 0x223344FF ;                                                                                                         // copy the value from "Device Address"
-//static const PROGMEM u1_t NWKSKEY[16] = { 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11 };      // copy the value from "Network Session Key" msb formatted
-//static const u1_t PROGMEM APPSKEY[16] = { 0xDD, 0xEE, 0xFF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC };      // copy the value from "App Session Key" msb formatted
+
+static const char *myDeviceName = "YOURTHING";
+static const u4_t DEVADDR = 0x223344FF ;                                                                                                         // copy the value from "Device Address"
+static const PROGMEM u1_t NWKSKEY[16] = { 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11 };      // copy the value from "Network Session Key" msb formatted
+static const u1_t PROGMEM APPSKEY[16] = { 0xDD, 0xEE, 0xFF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC };      // copy the value from "App Session Key" msb formatted
+
