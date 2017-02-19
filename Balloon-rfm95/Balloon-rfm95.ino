@@ -50,7 +50,7 @@ int  gpsEnergySavingActivated = false;                // this is set to true onc
 //#include "libraries_adjusted/lmic_adjusted_kaasfabriek/hal/hal.h"  // <hal/hal.h>
 #include <SPI.h>  //MISO MOSI SCK stuff
 #include "keys.h"  // the personal keys to identify our own nodes
-const unsigned  TX_INTERVAL = 250;  // transmit interval
+const unsigned  TX_INTERVAL = 50; //  250;  // transmit interval
 dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
 int  LMIC_DR_sequence_count = 12;
 int  LMIC_DR_sequence_index = 0;
@@ -583,18 +583,22 @@ void put_other_values_into_sendbuffer() {
   long vcc = readVcc();
   uint8_t vccBinary = vcc /20 ;  // rescale 0-5100 milli volt into 0 - 255 values
   mydata[9] = vccBinary;
+  #ifdef DEBUG
   Serial.print("Vcc = ");
   Serial.print(vcc);
   Serial.print(" milli Volt. vccBinary = ");
   Serial.print(vccBinary);
+  #endif
 
   double temperature = GetTemp();
   uint8_t temperatureBinary = temperature + 100;   // rescale -100 to 155 into 0 - 255 values
   mydata[10] = temperatureBinary;
+  #ifdef DEBUG
   Serial.print(" Temperature = ");
   Serial.print(temperature);
   Serial.print(" temperatureBinary = ");
   Serial.println(temperatureBinary);
+  #endif
 }
 
 
