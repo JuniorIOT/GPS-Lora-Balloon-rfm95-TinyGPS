@@ -27,12 +27,14 @@
 #define DE //BUG     // if DEBUG is defined, some code is added to display some basic debug info
 #define DEB // UG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
 
+#include "LowPower.h"   // help to do power save on the arduino  https://github.com/rocketscream/Low-Power
+
 //////////////////////////////////////////////
 // GPS libraries, mappings and things
 //////////////////////////////////////////////
 #include <SoftwareSerial.h> 
 #include <TinyGPS.h>
-//#include "libraries_adjusted/TinyGPS_adjusted_kaasfabriek/TinyGPS.h"   // <TinyGPS.h>
+
 SoftwareSerial ss(3, 2);  // ss RX, TX --> GPS TXD, RXD
 TinyGPS gps;
 
@@ -50,10 +52,12 @@ int  gpsEnergySavingActivated = false;                // this is set to true onc
 // #define DISABLE_JOIN     // Uncomment this to disable all code related to joining
 #define DISABLE_PING     // Uncomment this to disable all code related to ping
 #define DISABLE_BEACONS  // Uncomment this to disable all code related to beacon tracking.// Requires ping to be disabled too 
+
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>  //MISO MOSI SCK stuff
 #include "keys.h"  // the personal keys to identify our own nodes
+
 const unsigned  TX_INTERVAL = 50; //  250;  // transmit interval
 dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
 int  LMIC_DR_sequence_count = 12;
@@ -76,6 +80,7 @@ void  os_getArtEui (u1_t* buf) { }
 void  os_getDevEui (u1_t* buf) { }
 void  os_getDevKey (u1_t* buf) { } 
 
+int TX_COMPLETE_was_triggered = 0;  // 20170220 added to allow full controll in main Loop
 
 //////////////////////////////////////////////////////////
 //// Kaasfabriek routines for gps
@@ -207,14 +212,224 @@ void process_gps_values()
   #endif    // debug_xl
 }
 
+// Send a byte array of UBX protocol to the GPS  https://ukhas.org.uk/guides:ublox6
+void sendUBX(uint8_t *MSG, uint8_t len) {
+  for(int i=0; i<len; i++) {
+    ss.write(MSG[i]);
+    Serial.print(MSG[i], HEX);
+  }
+  ss.println();
+}
+ 
+// Calculate expected UBX ACK packet and parse UBX response from GPS  https://ukhas.org.uk/guides:ublox6
+boolean getUBX_ACK(uint8_t *MSG) {
+  uint8_t b;
+  uint8_t ackByteID = 0;
+  uint8_t ackPacket[10];
+  unsigned long startTime = millis();
+  Serial.print(" * Reading ACK response: ");
+ 
+  // Construct the expected ACK packet    
+  ackPacket[0] = 0xB5;  // header
+  ackPacket[1] = 0x62;  // header
+  ackPacket[2] = 0x05;  // class
+  ackPacket[3] = 0x01;  // id
+  ackPacket[4] = 0x02;  // length
+  ackPacket[5] = 0x00;
+  ackPacket[6] = MSG[2];  // ACK class
+  ackPacket[7] = MSG[3];  // ACK id
+  ackPacket[8] = 0;   // CK_A
+  ackPacket[9] = 0;   // CK_B
+ 
+  // Calculate the checksums
+  for (uint8_t i=2; i<8; i++) {
+    ackPacket[8] = ackPacket[8] + ackPacket[i];
+    ackPacket[9] = ackPacket[9] + ackPacket[8];
+  }
+ 
+  while (1) {
+ 
+    // Test for success
+    if (ackByteID > 9) {
+      // All packets in order!
+      Serial.println(" (SUCCESS!)");
+      return true;
+    }
+ 
+    // Timeout if no valid response in 3 seconds
+    if (millis() - startTime > 3000) { 
+      Serial.println(" (FAILED!)");
+      return false;
+    }
+ 
+    // Make sure data is available to read
+    if (ss.available()) {
+      b = ss.read();
+ 
+      // Check that bytes arrive in sequence as per expected ACK packet
+      if (b == ackPacket[ackByteID]) { 
+        ackByteID++;
+        Serial.print(b, HEX);
+      } 
+      else {
+        ackByteID = 0;  // Reset and look again, invalid order
+      }
+ 
+    }
+  }
+}
 
+byte gps_set_okay = 0 ;
+void gps_init() {
+    // load the send buffer with dummy location 0,0. This location 0,0 is recognized as dummy by TTN Mapper and will be ignored
+    put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
+    
+    // GPS serial starting
+    ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
+                            // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
+  
+    //   https://ukhas.org.uk/guides:ublox6
+    // THE FOLLOWING COMMAND SWITCHES MODULE TO 4800 BAUD
+    // THEN SWITCHES THE SOFTWARE SERIAL TO 4,800 BAUD
+    ss.print("$PUBX,41,1,0007,0003,4800,0*13\r\n"); 
+    ss.begin(4800);
+    ss.flush();
+      
+    // Airborne <1g - Used for applications with a higher dynamic range and vertical acceleration than a passenger car.
+    // No 2D position fixes supported. MAX Altitude [m]: 50000, MAX Velocity [m/s]: 100, MAX Vertical Velocity [m/s]: 100, 
+    // Sanity check type: Altitude, Max Position Deviation: Large
+    
+    //  THIS COMMAND SETS FLIGHT MODE AND CONFIRMS SUCESS https://ukhas.org.uk/guides:ublox6
+    Serial.println("Setting uBlox nav mode: ");
+    uint8_t setNav[] = {
+      0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 
+      0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC };
+    gps_set_okay=0;
+    while(!gps_set_okay)
+    {
+      sendUBX(setNav, sizeof(setNav)/sizeof(uint8_t));
+      gps_set_okay=getUBX_ACK(setNav);
+    }
+
+//     Serial.println("Switching off NMEA GLL: ");  // Generic Longitude, Lattitude
+//     uint8_t setGLL[] = { 
+//     0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x2B                   };
+//     gps_set_okay=0;
+//     while(!gps_set_okay)
+//     {    
+//     sendUBX(setGLL, sizeof(setGLL)/sizeof(uint8_t));
+//     gps_set_okay=getUBX_ACK(setGLL);
+//     }
+     
+//     Serial.println("Switching off NMEA GSA: ");  // Overall Satellite data
+//     uint8_t setGSA[] = { 
+//     0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x32                   };
+//     gps_set_okay=0;
+//     while(!gps_set_okay)
+//     {  
+//     sendUBX(setGSA, sizeof(setGSA)/sizeof(uint8_t));
+//     gps_set_okay=getUBX_ACK(setGSA);
+//     }
+     
+//     Serial.println("Switching off NMEA GSV: ");   // detailed Satellite data
+//     uint8_t setGSV[] = { 
+//     0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x39                   };
+//     gps_set_okay=0;
+//     while(!gps_set_sucess)
+//     {
+//     sendUBX(setGSV, sizeof(setGSV)/sizeof(uint8_t));
+//     gps_set_okay=getUBX_ACK(setGSV);
+//     }
+      
+//     Serial.print("Switching off NMEA RMC: ");  // Recommended Minimum data for gps
+//     uint8_t setRMC[] = { 
+//     0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x04, 0x40                   };
+//     gps_set_okay=0;
+//     while(!gps_set_okay)
+//     {
+//     sendUBX(setRMC, sizeof(setRMC)/sizeof(uint8_t));
+//     gps_set_okay=getUBX_ACK(setRMC);
+//     }
+
+//    // Turning off all GPS NMEA strings apart from GPGGA (fix information) on the uBlox modules
+//    ss.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");
+//    ss.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");
+//    ss.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");
+//    ss.print("$PUBX,40,GSV,0,0,0,0*59\r\n");
+//    ss.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");
+//    ss.print("$PUBX,40,RMC,0,0,0,0*47\r\n");    
+//    // can switch off GGA if you want to do manual polling...
+//    ss.println("$PUBX,40,GGA,0,0,0,0*5A");
+
+//    // manual polling is to send a request:
+//    ss.println("$PUBX,00*33");
+    
+    // infinite loop for GPS testing...
+    while(1)  {
+      if(ss.available()) {
+        char c = ss.read();
+        Serial.write(c); 
+        if (gps.encode(c)) {   // Did a new valid sentence come in?
+          Serial.print(" [valid] ");
+        }
+      }
+    }
+  
+}
+
+int gps_current_cpower_level = 0;
+void gps_wakeup() {
+  Serial.println("\nGwitching GPS to Wake up mode. ");
+  
+}
+void gps_read_data_and_adjust_power() {
+  Serial.println("\nRead GPS.. ");
+    char c;
+    unsigned long start = millis();
+    do {   
+      while (ss.available()) {
+        char c = ss.read();
+        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        #ifdef DEBUG_XL
+        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        #endif
+        
+        if (gps.encode(c)) { // Did a new valid sentence come in?
+            process_gps_values();
+            //show me something
+            Serial.print("gps ");
+            
+            // allow energy saving mode only if a fix has been achieved
+            if(GPS_values_are_valid && !gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) { 
+              Serial.println("\nFirst gps fix found, counting down to switch to Energy Saving. ");
+              gpsEnergySavingWantsToActivate = true;
+              gpsEnergySavingWantsToActivateStartTime = millis();
+            }  
+         }          
+      }
+    } while (millis() - start < 5000); // explanation:
+    // keep xxxx millis focussed on reading the ss. the datablurp will be less than one second
+    // a 3 second focus also works great if gps is in power saving mode
+    // if too low a value the gps blurp of data will be interrupted and incomplete due conflicting system interrupts
+    // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
+
+}
+void gps_Snooze() {
+  Serial.println("\nGwitching GPS to Snooze mode. ");
+
+  // change output from each second to once every 10 seconds
+  uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the data interval to every 10 seconds instead of every 1 second
+  ss.write(data, sizeof(data));
+        
+}
 
 //////////////////////////////////////////////////
 // Kaasfabriek routines for rfm95
 ///////////////////////////////////////////////
 
-// do_send call is scheduled in event handler
-void do_send(osjob_t* j){  
+// void do_send(osjob_t* j){   20170220  do_send call is no longer scheduled in event handler
+void do_send(){  
   // starting vesion was same as https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
     
     Serial.println("\ndo_send was called.");
@@ -277,12 +492,10 @@ void do_send(osjob_t* j){
         // NOW SEND SOME DATA OUT
         //  LMIC_setTxData2( LORAWAN_APP_PORT, LMIC.frame, LORAWAN_APP_DATA_SIZE, LORAWAN_CONFIRMED_MSG_ON );
         LMIC_setTxData2(1, mydata, message_size, 0);   
-
         Serial.println(" - Packet queued");
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
-
 
 // event gets hooked into the system
 void onEvent (ev_t ev) {
@@ -319,6 +532,8 @@ void onEvent (ev_t ev) {
             break;
         case EV_TXCOMPLETE:
             Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+            TX_COMPLETE_was_triggered = 1;  // 20170220 our custom code see https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
+            
             if (LMIC.txrxFlags & TXRX_ACK)
               Serial.println(F("Received ack"));
             if (LMIC.dataLen) {
@@ -326,9 +541,9 @@ void onEvent (ev_t ev) {
               Serial.println(LMIC.dataLen);
               Serial.println(F(" bytes of payload"));
             }
-            // Schedule next transmission
-            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
-            break;
+       //     // Schedule next transmission   20170220 disabled the interrupt chain, now all controll in main Loop
+       //     os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+       //     break;
         case EV_LOST_TSYNC:
             Serial.println(F("EV_LOST_TSYNC"));
             break;
@@ -405,15 +620,15 @@ void lmic_init()
     LMIC_selectSubBand(1);
     #endif
 
-// Disable data rate adaptation - per http://platformio.org/lib/show/842/IBM%20LMIC%20framework%20v1.51%20for%20Arduino
-//      and http://www.developpez.net/forums/attachments/p195381d1450200851/environnements-developpement/delphi/web-reseau/reseau-objet-connecte-lorawan-delphi/lmic-v1.5.pdf/
-//LMIC_setAdrMode(0);     // Enable or disable data rate adaptation. Should be turned off if the device is mobile
+    // Disable data rate adaptation - per http://platformio.org/lib/show/842/IBM%20LMIC%20framework%20v1.51%20for%20Arduino
+    //      and http://www.developpez.net/forums/attachments/p195381d1450200851/environnements-developpement/delphi/web-reseau/reseau-objet-connecte-lorawan-delphi/lmic-v1.5.pdf/
+    //LMIC_setAdrMode(0);     // Enable or disable data rate adaptation. Should be turned off if the device is mobile
     // Disable link check validation
     LMIC_setLinkCheckMode(0);  //Enable/disable link check validation. Link check mode is enabled by default and is used to periodically verify network connectivity. Must be called only if a session is established.
-// Disable beacon tracking
-//LMIC_disableTracking ();  // Disable beacon tracking. The beacon will be no longer tracked and, therefore, also pinging will be disabled.
-// Stop listening for downstream data (periodical reception)
-//LMIC_stopPingable();  //Stop listening for downstream data. Periodical reception is disabled, but beacons will still be tracked. In order to stop tracking, the beacon a call to LMIC_disableTracking() is required
+    // Disable beacon tracking
+    //LMIC_disableTracking ();  // Disable beacon tracking. The beacon will be no longer tracked and, therefore, also pinging will be disabled.
+    // Stop listening for downstream data (periodical reception)
+    //LMIC_stopPingable();  //Stop listening for downstream data. Periodical reception is disabled, but beacons will still be tracked. In order to stop tracking, the beacon a call to LMIC_disableTracking() is required
 
     // TTN uses SF9 for its RX2 window.
     LMIC.dn2Dr = DR_SF9;
@@ -497,19 +712,16 @@ void setup() {
     Serial.println("\n\nJunior Internet of Things RFM95 Starting ");
     Serial.print("This device is "); Serial.print(myDeviceName); Serial.print(" ("); Serial.print(DEVADDR); Serial.println(") ");
     Serial.println();
-  
-    // load the send buffer with dummy location 0,0. This location 0,0 is recognized as dummy by TTN Mapper and will be ignored
-    put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
-    
-    // GPS serial
-    ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
-                            // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
 
+    gps_init();
+    
     lmic_init();  // code moved to sub as per example JP
     
     // Start the radio job delayed so system can look at GPS first
-    os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(8), do_send);
+    // os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(8), do_send);
+    //  --> 2017-02-20, no scheduling, now implemented a different scheme where the send is decided in the main loop and no longer driven by the LMIC interrupt sequence
 }
+
 
 void loop() {
 
@@ -531,8 +743,41 @@ void loop() {
     //  3a. queue a message 
     //  3b. wait and process system interrupts till TX complete
     // 4. sleep to fill up time so one complete sycle is as per definition
+  
+    Serial.println("\nNew iteration starting. ");
+    Serial.println("\nRead GPS ");
 
-    Serial.println("\nRead GPS... ");
+    gps_wakeup();
+    gps_read_data_and_adjust_power();
+    gps_Snooze();
+
+    Serial.println("\nRead other values ");
+    put_other_values_into_sendbuffer();
+    
+    Serial.println("\nSending TTN message ");
+    do_send();
+    Serial.println("Waiting..");  
+    while (TX_COMPLETE_was_triggered == 0) {
+      os_runloop_once();     // system picks up just the first job from all scheduled jobs, needed for the scheduled and interrupt tasks
+    }
+    TX_COMPLETE_was_triggered = 0;
+    Serial.println("TX_COMPLETE");
+    
+    
+    Serial.println("\nGo to sleep to save power ");
+    //gps_Snooze();
+    delay(1000);// not sure if needed, might be needed to allow serial stream to shut down
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    //gps_wakeup();
+    delay(1000);  // not sure if needed, might be needed to allow serial stream to wake up 
+    Serial.println("sleep has completed");
+}
+
+void loop_old() {
+
+    Serial.println("\nRead GPS.. ");
     char c;
     unsigned long start = millis();
     do {   
@@ -563,18 +808,19 @@ void loop() {
     // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
 
     put_other_values_into_sendbuffer();
-    os_runloop_once();  // system picks up just the fisrst job from all scheduled jobs
+    os_runloop_once();  // system picks up just the first job from all scheduled jobs
 
     // can we go into energy saving mode yet?
     if(gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) {
       if(millis() - gpsEnergySavingWantsToActivateStartTime > gpsEnergySavingStartDelayMillis) {
         Serial.println("\nGwitching GPS to Energy Saving. ");
-        uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the usb interval to every 10 seconds instead of every 1 second
+        uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the data interval to every 10 seconds instead of every 1 second
         ss.write(data, sizeof(data));
         
         gpsEnergySavingWantsToActivate = false;
         gpsEnergySavingActivated = true;
       }
     }
+    
 }
 
