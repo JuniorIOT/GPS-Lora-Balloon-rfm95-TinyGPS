@@ -228,18 +228,10 @@ void calcChecksum(byte *checksumPayload, byte payloadSize) {
 void sendUBX(uint8_t *MSG, uint8_t len) {
   for(int i=0; i<len; i++) {
     ss.write(MSG[i]);
-    Serial.print(MSG[i], HEX);
+    //Serial.print(MSG[i], HEX);
   }
   ss.println();
 }
-//void sendUBX(byte *UBXmsg, byte msgLength) {
-//  for(int i = 0; i < msgLength; i++) {
-//    ss.write(UBXmsg[i]);
-//    ss.flush();
-//  }
-//  ss.println();
-//  ss.flush();
-//}
 
 // Calculate expected UBX ACK packet and parse UBX response from GPS  https://ukhas.org.uk/guides:ublox6
 boolean getUBX_ACK(uint8_t *MSG) {
@@ -247,7 +239,7 @@ boolean getUBX_ACK(uint8_t *MSG) {
   uint8_t ackByteID = 0;
   uint8_t ackPacket[10];
   unsigned long startTime = millis();
-  Serial.print(" * Reading ACK response: ");
+  Serial.print(" * Reading ACK ");
  
   // Construct the expected ACK packet    
   ackPacket[0] = 0xB5;  // header
@@ -270,13 +262,13 @@ boolean getUBX_ACK(uint8_t *MSG) {
     // Test for success
     if (ackByteID > 9) {
       // All packets in order!
-      Serial.println(" (GPS command SUCCESS!)");
+      Serial.println(" (GPS cmd okay)");
       return true;
     }
  
     // Timeout if no valid response in 3 seconds
     if (millis() - startTime > 3000) { 
-      Serial.println(" (GPS command FAILED!)");
+      Serial.println(" (GPS cmd fail)");
       return false;
     }
  
@@ -313,76 +305,159 @@ void gps_init() {
     ss.begin(4800);
     ss.flush();
       
-    // Airborne <1g - Used for applications with a higher dynamic range and vertical acceleration than a passenger car.
-    // No 2D position fixes supported. MAX Altitude [m]: 50000, MAX Velocity [m/s]: 100, MAX Vertical Velocity [m/s]: 100, 
-    // Sanity check type: Altitude, Max Position Deviation: Large
-    
-//    //  THIS COMMAND SETS FLIGHT MODE AND CONFIRMS SUCESS https://ukhas.org.uk/guides:ublox6
-//    Serial.println("Setting uBlox flight mode: ");
-//    uint8_t setNav[] = {
-//      0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 
-//      0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-//      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC };
-      
-    //Settings Array contains the following settings: 
-    //  [0]NavMode, 
-    //    Pedestrian Mode    = 0x03   good accuracy below 6km altitude
-    //    Automotive Mode    = 0x04
-    //    Sea Mode           = 0x05
-    //    Airborne < 1G Mode = 0x06   high altitude ballooning, less accurate
-    //    Airborne < 4G Mode = 0x08   rockets
-    
     //Generate the configuration string for Navigation Mode
-    byte myNavMode = 0x06;
+    //  [0]NavMode, https://wiki.paparazziuav.org/wiki/Module/GPS_UBlox_UCenter
+    //    0x00 = Portable, deviation=medium. max 12km height, maz speed 310 m/s, vert 50 m/s  
+    //    0x02 = Stationary timing applications, deviation=small. max 9km heighth, max speed 10 m/s, vert 6 m/s 
+    //    0x03 = Pedestrian Mode, deviation=small. max 9km height, max speed 30m/s, vert 20m/s 
+    //    0x04 = Automotive Mode, deviation=medium. max 5km heightm max speed 62 m/s, vert 15 m/s 
+    //    0x05 = Sea Mode, deviation=medium. max alt 500 meters, max speed 25 m/s, vert 5 m/s
+    //    0x06 = Airborne < 1G Mode, deviation=large. no 2d fix supported, max 50km height, max speed 250 m/s, vert 100 m/s; high altitude ballooning, less accurate
+    //    0x07 = Airborne < 2G Mode, deviation=large. recommended for typical airborne, no 2d fix supported, max 50km height, max speed 250 m/s, vert 100 m/s;
+    //    0x08 = Airborne < 4G Mode, deviation=large. only for extremely dynamic, no 2d fix supported, max 50km height, max speed 500 m/s, vert 100 m/s;
+    //    0x09 = wrist worn watch (not supported in protocol versions less than 18)
+    
+    //byte myNavMode = 0x04;
+    const byte myNavMode = 0x07;
+    Serial.print("Set nav mode ");
+    Serial.println(myNavMode);
     byte setNav[] = {
           0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 
             myNavMode, 
           0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 
-          0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+          0x2C, 0x01, 0x00,  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     calcChecksum(&setNav[2], sizeof(setNav) - 4);
-
     byte gps_set_okay=0;
-    while(!gps_set_okay)
-    {
+    while(!gps_set_okay) {
       sendUBX(setNav, sizeof(setNav)/sizeof(uint8_t));
       gps_set_okay=getUBX_ACK(setNav);
     }
-     
+
+//    //DataRate:  http://playground.arduino.cc/UBlox/GPS
+//    //1Hz     = 0xE8 0x03
+//    //2Hz     = 0xF4 0x01
+//    //3.33Hz  = 0x2C 0x01
+//    //4Hz     = 0xFA 0x00
+//    const byte datarate01 = 0xE8;
+//    const byte datarate02 = 0x03;
+//    byte setDataRate[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, datarate01, datarate02, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00};
+//    calcChecksum(&setDataRate[2], sizeof(setDataRate) - 4);
+//    gps_set_okay=0;
+//    while(!gps_set_okay) {
+//      sendUBX(setDataRate, sizeof(setDataRate)/sizeof(uint8_t));
+//      gps_set_okay=getUBX_ACK(setDataRate);
+//    }
+    
 //    // Turning off all GPS NMEA strings apart from GPGGA (fix information) on the uBlox modules
 // we need lat, lon, alt, HDOP  --> keep GGA, GSA
     ss.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");  // GLL = Lat/Lon
     ss.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");  // ZDA = date, time
     ss.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");  // VTG = Vector Track and speed over ground
     ss.print("$PUBX,40,GSV,0,0,0,0*59\r\n");  //GSV = Detailed satellite data
-//    ss.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");  // GSA = Overall Satelite data
+//   // ss.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");  // GSA = Overall Satelite data
     ss.print("$PUBX,40,RMC,0,0,0,0*47\r\n");    // RMC = recommended minimum data for GPS, no Alt
-//    // can switch off GGA if you want to do manual polling...
+////    // can switch off GGA if you want to do manual polling...
 //    ss.println("$PUBX,40,GGA,0,0,0,0*5A");   // GGA = Fix information
 
 //    // manual polling is possible to instruct gps output one specific string:
 //    ss.println("$PUBX,00*33");
 
-    // infinite loop for GPS testing...
-    while(1)  {
-      if(ss.available()) {
-        char c = ss.read();
-        Serial.write(c); 
-        if (gps.encode(c)) {   // Did a new valid sentence come in?
-          Serial.print(" [valid] ");
-        }
-      }
-    }
+
+//  #define GGA_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x00,0x00,0xFA,0x0F                            // switch GGA off
+//  #define GLL_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x01,0x00,0xFB,0x11                            // switch GLL off
+//  #define GSA_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x02,0x00,0xFC,0x13                            // switch GSA off
+//  #define GSV_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x03,0x00,0xFD,0x15                            // switch GSV off
+//  #define RMC_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x04,0x00,0xFE,0x17                            // switch RMC off
+//  #define VTG_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x05,0x00,0xFF,0x19                            // switch VTG off
+//  #define POSLLH_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x02,0x01,0x0E,0x47                            // set POSLLH MSG rate
+//  #define STATUS_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x03,0x01,0x0F,0x49                            // set STATUS MSG rate
+//  #define SOL_ON           0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x06,0x01,0x12,0x4F                            // set SOL MSG rate
+//  #define VELNED_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x12,0x01,0x1E,0x67                            // set VELNED MSG rate
+//  #define SVINFO_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x30,0x01,0x3C,0xA3                            // set SVINFO MSG rate
+//  #define TIMEUTC_ON       0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x21,0x01,0x2D,0x85                            // set TIMEUTC MSG rate
+//  #define SBAS_ON          0xB5,0x62,0x06,0x16,0x08,0x00,0x03,0x07,0x03,0x00,0x51,0x08,0x00,0x00,0x8A,0x41   // set WAAS to EGNOS
+//  #define UBLOX_1HZ        0xB5,0x62,0x06,0x08,0x06,0x00, 0xE8,0x03,0x01,0x00,0x01,0x00,0x01,0x39       // set rate to 1Hz
+//  #define UBLOX_2HZ        0xB5,0x62,0x06,0x08,0x06,0x00, 0xF4,0x01,0x01,0x00,0x01,0x00,0x0B,0x77       // set rate to 2Hz
+//  #define UBLOX_3HZ        0xB5,0x62,0x06,0x08,0x06,0x00, 0x4D,0x01,0x01,0x00,0x01,0x00,0x64,0x8D       // set rate to 3Hz
+//  #define UBLOX_4HZ        0xB5,0x62,0x06,0x08,0x06,0x00, 0xFA,0x00,0x01,0x00,0x01,0x00,0x10,0x96       // set rate to 4Hz
+//  #define UBLOX_5HZ        0xB5,0x62,0x06,0x08,0x06,0x00, 0xC8,0x00,0x01,0x00,0x01,0x00,0xDE,0x6A       // set rate to 5Hz
+//  #define UBLOX_STATIONARY 0xB5,0x62,0x06,0x24,0x24,0x00,0xFF,0xFF, 0x03,0x02,0x00,0x00,0x00,0x00,0x10,0x27,0x00,0x00,0x05,0x00,0xFA,0x00,0xFA,0x00,0x64,0x00,0x2C,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x12,0x54
+//  #define UBLOX_PEDESTRIAN 0xB5,0x62,0x06,0x24,0x24,0x00,0xFF,0xFF, 0x03,0x03,0x00,0x00,0x00,0x00,0x10,0x27,0x00,0x00,0x05,0x00,0xFA,0x00,0xFA,0x00,0x64,0x00,0x2C,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x13,0x76
+//  #define UBLOX_AUTOMOTIVE 0xB5,0x62,0x06,0x24,0x24,0x00,0xFF,0xFF, 0x04,0x03,0x00,0x00,0x00,0x00,0x10,0x27,0x00,0x00,0x05,0x00,0xFA,0x00,0xFA,0x00,0x64,0x00,0x2C,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x14,0x98
+//  #define UBLOX_SEA        0xB5,0x62,0x06,0x24,0x24,0x00,0xFF,0xFF, 0x05,0x03,0x00,0x00,0x00,0x00,0x10,0x27,0x00,0x00,0x05,0x00,0xFA,0x00,0xFA,0x00,0x64,0x00,0x2C,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x15,0xBA
+//  #define UBLOX_AIRBORN    0xB5,0x62,0x06,0x24,0x24,0x00,0xFF,0xFF, 0x06,0x03,0x00,0x00,0x00,0x00,0x10,0x27,0x00,0x00,0x05,0x00,0xFA,0x00,0xFA,0x00,0x64,0x00,0x2C,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x16,0xDC
+//  #define UBLOX_115200     0xB5,0x62,0x06,0x00,0x14,0x00,0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x00,0xC2,0x01,0x00,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0xBE,0x72 //set speed to 115200
+//  #define UBLOX_57600      0xB5,0x62,0x06,0x00,0x14,0x00,0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x00,0xE1,0x00,0x00,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0xDC,0xBD //set speed to 57600
+//  #define UBLOX_38400      0xB5,0x62,0x06,0x00,0x14,0x00,0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x00,0x96,0x00,0x00,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x91,0x84 //set speed to 38400
+//  #define UBLOX_19200      0xB5,0x62,0x06,0x00,0x14,0x00,0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x00,0x4B,0x00,0x00,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x46,0x4B //set speed to 19200
+//  #define UBLOX_9600       0xB5,0x62,0x06,0x00,0x14,0x00,0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x80,0x25,0x00,0x00,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0xA0,0xA9 //set speed to 9600
+
+    // really nice description of power saving modes https://ukhas.org.uk/guides:ublox_psm#ublox_6_power_saving_modes
+    ////Set GPS ot Power Save Mode
+    //uint8_t setPSM[] = { 0xB5, 0x62, 0x06, 0x11, 0x02, 0x00, 0x08, 0x01, 0x22, 0x92 }; // Setup for Power Save Mode (Default Cyclic 1s)
+    
+    ////Set GPS to backup mode (sets it to never wake up on its own) minimal current draw <5mA, loses all settings
+    //uint8_t GPSoff[] = {0xB5, 0x62, 0x02, 0x41, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x4D, 0x3B};
+    ////Restart GPS
+    //uint8_t GPSon[] = {0xB5, 0x62, 0x02, 0x41, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x4C, 0x37};
+
+     ////Switch the RF GPS section off, draws about 5mA, retains its settings, wakes on serial command.
+     //uint8_t GPSoff[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00,0x08, 0x00, 0x16, 0x74}
+     //uint8_t GPSon[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00,0x09, 0x00, 0x17, 0x76};
+
+    //Dynamic Model '6' Aiborne < 1g Large Deviation
+    //0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC
+    //Dynamic Model '3' Pedestrian Small Deviation
+    //0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x76         
+    //Max Performance Mode (default)
+    //0xB5, 0x62, 0x06, 0x11, 0x02, 0x00, 0x08, 0x00, 0x21, 0x91
+    //Power Save Mode
+    //0xB5, 0x62, 0x06, 0x11, 0x02, 0x00, 0x08, 0x01, 0x22, 0x92
+    //Eco Mode Don't want this one but here for reference.
+    //0xB5, 0x62, 0x06, 0x11, 0x02, 0x00, 0x08, 0x04, 0x25, 0x95 
+    
+    //CFG-PM2
+    //Not sure what the implication of "do not enter 'inactive for search' state when no fix" is.
+    //Update Period 1 second do not enter 'inactive for search' state when no fix unchecked (default setting)
+    //0xB5, 0x62, 0x06, 0x3B, 0x2C, 0x00, 0x01, 0x06, 0x00, 0x00, 0x00, 0x94, 0x02, 0x00, 0xE8, 0x03, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x4F, 0xC1, 0x03, 0x00, 0x87, 0x02, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x64, 0x40, 0x01, 0x00, 0x9B, 0x75 
+    //Update Period 1 second do not enter 'inactive for search' state when no fix checked
+    //0xB5, 0x62, 0x06, 0x3B, 0x2C, 0x00, 0x01, 0x06, 0x00, 0x00, 0x00, 0x90, 0x03, 0x00, 0xE8, 0x03, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x4F, 0xC1, 0x03, 0x00, 0x86, 0x02, 0x00, 0x00, 0xFE, 0x00, 0x00, 0x00, 0x64, 0x40, 0x01, 0x00, 0x96, 0xEB
+    //Update Period 10 seconds , do not enter 'inactive for search' state when no fix checked
+    //0xB5, 0x62, 0x06, 0x3B, 0x2C, 0x00, 0x01, 0x06, 0x00, 0x00, 0x00, 0x90, 0x03, 0x00, 0x10, 0x27, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x4F, 0xC1, 0x03, 0x00, 0x87, 0x02, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x64, 0x40, 0x01, 0x00, 0xE4, 0x8B
+    //Update Period 10 seconds , do not enter 'inactive for search' state when no fix unchecked
+    //0xB5, 0x62, 0x06, 0x3B, 0x2C, 0x00, 0x01, 0x06, 0x00, 0x00, 0x00, 0x90, 0x02, 0x00, 0x10, 0x27, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x4F, 0xC1, 0x03, 0x00, 0x86, 0x02, 0x00, 0x00, 0xFE, 0x00, 0x00, 0x00, 0x64, 0x40, 0x01, 0x00, 0xE1, 0x51
+    
+    //CFG-RST 
+    //Turn GPS RF section off 
+    //0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00,0x08, 0x00, 0x16, 0x74
+    //Turn GPS RF Section on
+    //0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00,0x09, 0x00, 0x17, 0x76
+    //GPS Cold Start (Forced Watchdog)
+    //0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0x87, 0x00, 0x00, 0x94, 0xF5
+
+    //-----
+ 
+//    // infinite loop for GPS testing...
+//    while(1)  {
+//      if(ss.available()) {
+//        char c = ss.read();
+//        Serial.write(c); 
+//        if (gps.encode(c)) {   // Did a new valid sentence come in?
+//          Serial.print(" [valid] ");
+//        }
+//      }
+//    }
   
 }
 
-int gps_current_cpower_level = 0;
+//int gps_current_power_level = 0;
 void gps_wakeup() {
-  Serial.println("\nGwitching GPS to Wake up mode. ");
+  Serial.println("\nGPS Wake up ");
   
 }
 
 void gps_read_data_and_adjust_power() {
-  Serial.println("\nRead GPS.. ");
+  Serial.println("\nRead GPS ");
     char c;
     unsigned long start = millis();
     do {   
@@ -398,12 +473,6 @@ void gps_read_data_and_adjust_power() {
             //show me something
             Serial.print("gps ");
             
-            // allow energy saving mode only if a fix has been achieved
-            if(GPS_values_are_valid && !gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) { 
-              Serial.println("\nFirst gps fix found, counting down to switch to Energy Saving. ");
-              gpsEnergySavingWantsToActivate = true;
-              gpsEnergySavingWantsToActivateStartTime = millis();
-            }  
          }          
       }
     } while (millis() - start < 5000); // explanation:
@@ -415,12 +484,8 @@ void gps_read_data_and_adjust_power() {
 }
 
 void gps_Snooze() {
-  Serial.println("\nGwitching GPS to Snooze mode. ");
+  Serial.println("\nGPS Snooze ");
 
-  // change output from each second to once every 10 seconds
-  uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the data interval to every 10 seconds instead of every 1 second
-  ss.write(data, sizeof(data));
-        
 }
 
 //////////////////////////////////////////////////
@@ -431,7 +496,7 @@ void gps_Snooze() {
 void do_send(){  
   // starting vesion was same as https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
     
-    Serial.println("\ndo_send was called.");
+    Serial.println("\ndo_send ");
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
         Serial.println(F("OP_TXRXPEND, not sending"));
@@ -542,7 +607,7 @@ void onEvent (ev_t ev) {
             }
        //     // Schedule next transmission   20170220 disabled the interrupt chain, now all controll in main Loop
        //     os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
-       //     break;
+            break;
         case EV_LOST_TSYNC:
             Serial.println(F("EV_LOST_TSYNC"));
             break;
@@ -708,17 +773,12 @@ void put_other_values_into_sendbuffer() {
 void setup() {
     Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
     
-    Serial.println("\n\nJunior Internet of Things RFM95 Starting ");
-    Serial.print("This device is "); Serial.print(myDeviceName); Serial.print(" ("); Serial.print(DEVADDR); Serial.println(") ");
+    Serial.print("\n\nStarting "); Serial.print(myDeviceName); Serial.print(" ("); Serial.print(DEVADDR); Serial.println(") ");
     Serial.println();
 
     gps_init();
+    lmic_init();  
     
-    lmic_init();  // code moved to sub as per example JP
-    
-    // Start the radio job delayed so system can look at GPS first
-    // os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(8), do_send);
-    //  --> 2017-02-20, no scheduling, now implemented a different scheme where the send is decided in the main loop and no longer driven by the LMIC interrupt sequence
 }
 
 
@@ -743,12 +803,12 @@ void loop() {
     //  3b. wait and process system interrupts till TX complete
     // 4. sleep to fill up time so one complete sycle is as per definition
   
-    Serial.println("\nNew iteration starting. ");
+    Serial.println();
     Serial.println("\nRead GPS ");
 
-    gps_wakeup();
+    //gps_wakeup();
     gps_read_data_and_adjust_power();
-    gps_Snooze();
+    //gps_Snooze();
 
     Serial.println("\nRead other values ");
     put_other_values_into_sendbuffer();
@@ -763,81 +823,68 @@ void loop() {
     Serial.println("TX_COMPLETE");
     
     
-    Serial.println("\nGo to sleep to save power ");
+    Serial.println("\nSleep ");
     //gps_Snooze();
     delay(1000);// not sure if needed, might be needed to allow serial stream to shut down
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);  
     LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+
+    // sleep does not work
+    delay(50000);
+    
     //gps_wakeup();
     delay(1000);  // not sure if needed, might be needed to allow serial stream to wake up 
     Serial.println("sleep has completed");
 }
 
-void loop_old() {
-
-    Serial.println("\nRead GPS.. ");
-    char c;
-    unsigned long start = millis();
-    do {   
-      while (ss.available()) {
-        char c = ss.read();
-        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
-        #ifdef DEBUG_XL
-        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
-        #endif
-        
-        if (gps.encode(c)) { // Did a new valid sentence come in?
-            process_gps_values();
-            //show me something
-            Serial.print("gps ");
-            
-            // allow energy saving mode only if a fix has been achieved
-            if(GPS_values_are_valid && !gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) { 
-              Serial.println("\nFirst gps fix found, counting down to switch to Energy Saving. ");
-              gpsEnergySavingWantsToActivate = true;
-              gpsEnergySavingWantsToActivateStartTime = millis();
-            }  
-         }          
-      }
-    } while (millis() - start < 5000); // explanation:
-    // keep xxxx millis focussed on reading the ss. the datablurp will be less than one second
-    // a 3 second focus also works great if gps is in power saving mode
-    // if too low a value the gps blurp of data will be interrupted and incomplete due conflicting system interrupts
-    // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
-
-    put_other_values_into_sendbuffer();
-    os_runloop_once();  // system picks up just the first job from all scheduled jobs
-
-    // can we go into energy saving mode yet?
-    if(gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) {
-      if(millis() - gpsEnergySavingWantsToActivateStartTime > gpsEnergySavingStartDelayMillis) {
-        Serial.println("\nGwitching GPS to Energy Saving. ");
-        uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the data interval to every 10 seconds instead of every 1 second
-        ss.write(data, sizeof(data));
-        
-        gpsEnergySavingWantsToActivate = false;
-        gpsEnergySavingActivated = true;
-      }
-    }
-    
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//void loop_old() {
+//
+//    Serial.println("\nRead GPS.. ");
+//    char c;
+//    unsigned long start = millis();
+//    do {   
+//      while (ss.available()) {
+//        char c = ss.read();
+//        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+//        #ifdef DEBUG_XL
+//        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+//        #endif
+//        
+//        if (gps.encode(c)) { // Did a new valid sentence come in?
+//            process_gps_values();
+//            //show me something
+//            Serial.print("gps ");
+//            
+//            // allow energy saving mode only if a fix has been achieved
+//            if(GPS_values_are_valid && !gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) { 
+//              Serial.println("\nFirst gps fix found, counting down to switch to Energy Saving. ");
+//              gpsEnergySavingWantsToActivate = true;
+//              gpsEnergySavingWantsToActivateStartTime = millis();
+//            }  
+//         }          
+//      }
+//    } while (millis() - start < 5000); // explanation:
+//    // keep xxxx millis focussed on reading the ss. the datablurp will be less than one second
+//    // a 3 second focus also works great if gps is in power saving mode
+//    // if too low a value the gps blurp of data will be interrupted and incomplete due conflicting system interrupts
+//    // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
+//
+//    put_other_values_into_sendbuffer();
+//    os_runloop_once();  // system picks up just the first job from all scheduled jobs
+//
+//    // can we go into energy saving mode yet?
+//    if(gpsEnergySavingWantsToActivate && !gpsEnergySavingActivated ) {
+//      if(millis() - gpsEnergySavingWantsToActivateStartTime > gpsEnergySavingStartDelayMillis) {
+//        Serial.println("\nGwitching GPS to Less frequent data burst. ");
+//        uint8_t data[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x10, 0x27, 0x01, 0x00, 0x01, 0x00, 0x4D, 0xDD}; // from u-center software - the changes the data interval to every 10 seconds instead of every 1 second
+//        ss.write(data, sizeof(data));
+//        
+//        gpsEnergySavingWantsToActivate = false;
+//        gpsEnergySavingActivated = true;
+//      }
+//    }
+//    
+//}
 
 
 
