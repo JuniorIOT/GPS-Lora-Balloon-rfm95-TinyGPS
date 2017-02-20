@@ -212,6 +212,18 @@ void process_gps_values()
   #endif    // debug_xl
 }
 
+void calcChecksum(byte *checksumPayload, byte payloadSize) {
+  byte CK_A = 0, CK_B = 0;
+  for (int i = 0; i < payloadSize ;i++) {
+    CK_A = CK_A + *checksumPayload;
+    CK_B = CK_B + CK_A;
+    checksumPayload++;
+  }
+  *checksumPayload = CK_A;
+  checksumPayload++;
+  *checksumPayload = CK_B;
+}
+
 // Send a byte array of UBX protocol to the GPS  https://ukhas.org.uk/guides:ublox6
 void sendUBX(uint8_t *MSG, uint8_t len) {
   for(int i=0; i<len; i++) {
@@ -220,7 +232,15 @@ void sendUBX(uint8_t *MSG, uint8_t len) {
   }
   ss.println();
 }
- 
+//void sendUBX(byte *UBXmsg, byte msgLength) {
+//  for(int i = 0; i < msgLength; i++) {
+//    ss.write(UBXmsg[i]);
+//    ss.flush();
+//  }
+//  ss.println();
+//  ss.flush();
+//}
+
 // Calculate expected UBX ACK packet and parse UBX response from GPS  https://ukhas.org.uk/guides:ublox6
 boolean getUBX_ACK(uint8_t *MSG) {
   uint8_t b;
@@ -245,20 +265,18 @@ boolean getUBX_ACK(uint8_t *MSG) {
   for (uint8_t i=2; i<8; i++) {
     ackPacket[8] = ackPacket[8] + ackPacket[i];
     ackPacket[9] = ackPacket[9] + ackPacket[8];
-  }
- 
-  while (1) {
- 
+  } 
+  while (1) { 
     // Test for success
     if (ackByteID > 9) {
       // All packets in order!
-      Serial.println(" (SUCCESS!)");
+      Serial.println(" (GPS command SUCCESS!)");
       return true;
     }
  
     // Timeout if no valid response in 3 seconds
     if (millis() - startTime > 3000) { 
-      Serial.println(" (FAILED!)");
+      Serial.println(" (GPS command FAILED!)");
       return false;
     }
  
@@ -279,7 +297,6 @@ boolean getUBX_ACK(uint8_t *MSG) {
   }
 }
 
-byte gps_set_okay = 0 ;
 void gps_init() {
     // load the send buffer with dummy location 0,0. This location 0,0 is recognized as dummy by TTN Mapper and will be ignored
     put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
@@ -290,7 +307,8 @@ void gps_init() {
   
     //   https://ukhas.org.uk/guides:ublox6
     // THE FOLLOWING COMMAND SWITCHES MODULE TO 4800 BAUD
-    // THEN SWITCHES THE SOFTWARE SERIAL TO 4,800 BAUD
+    // THEN SWITCHES THE SOFTWARE SERIAL TO 4800 BAUD
+    //for what reason would we want this, stability of read maybe?
     ss.print("$PUBX,41,1,0007,0003,4800,0*13\r\n"); 
     ss.begin(4800);
     ss.flush();
@@ -299,72 +317,51 @@ void gps_init() {
     // No 2D position fixes supported. MAX Altitude [m]: 50000, MAX Velocity [m/s]: 100, MAX Vertical Velocity [m/s]: 100, 
     // Sanity check type: Altitude, Max Position Deviation: Large
     
-    //  THIS COMMAND SETS FLIGHT MODE AND CONFIRMS SUCESS https://ukhas.org.uk/guides:ublox6
-    Serial.println("Setting uBlox nav mode: ");
-    uint8_t setNav[] = {
-      0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 
-      0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC };
-    gps_set_okay=0;
+//    //  THIS COMMAND SETS FLIGHT MODE AND CONFIRMS SUCESS https://ukhas.org.uk/guides:ublox6
+//    Serial.println("Setting uBlox flight mode: ");
+//    uint8_t setNav[] = {
+//      0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 
+//      0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+//      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC };
+      
+    //Settings Array contains the following settings: 
+    //  [0]NavMode, 
+    //    Pedestrian Mode    = 0x03   good accuracy below 6km altitude
+    //    Automotive Mode    = 0x04
+    //    Sea Mode           = 0x05
+    //    Airborne < 1G Mode = 0x06   high altitude ballooning, less accurate
+    //    Airborne < 4G Mode = 0x08   rockets
+    
+    //Generate the configuration string for Navigation Mode
+    byte myNavMode = 0x06;
+    byte setNav[] = {
+          0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 
+            myNavMode, 
+          0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 
+          0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    calcChecksum(&setNav[2], sizeof(setNav) - 4);
+
+    byte gps_set_okay=0;
     while(!gps_set_okay)
     {
       sendUBX(setNav, sizeof(setNav)/sizeof(uint8_t));
       gps_set_okay=getUBX_ACK(setNav);
     }
-
-//     Serial.println("Switching off NMEA GLL: ");  // Generic Longitude, Lattitude
-//     uint8_t setGLL[] = { 
-//     0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x2B                   };
-//     gps_set_okay=0;
-//     while(!gps_set_okay)
-//     {    
-//     sendUBX(setGLL, sizeof(setGLL)/sizeof(uint8_t));
-//     gps_set_okay=getUBX_ACK(setGLL);
-//     }
      
-//     Serial.println("Switching off NMEA GSA: ");  // Overall Satellite data
-//     uint8_t setGSA[] = { 
-//     0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x32                   };
-//     gps_set_okay=0;
-//     while(!gps_set_okay)
-//     {  
-//     sendUBX(setGSA, sizeof(setGSA)/sizeof(uint8_t));
-//     gps_set_okay=getUBX_ACK(setGSA);
-//     }
-     
-//     Serial.println("Switching off NMEA GSV: ");   // detailed Satellite data
-//     uint8_t setGSV[] = { 
-//     0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x39                   };
-//     gps_set_okay=0;
-//     while(!gps_set_sucess)
-//     {
-//     sendUBX(setGSV, sizeof(setGSV)/sizeof(uint8_t));
-//     gps_set_okay=getUBX_ACK(setGSV);
-//     }
-      
-//     Serial.print("Switching off NMEA RMC: ");  // Recommended Minimum data for gps
-//     uint8_t setRMC[] = { 
-//     0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x04, 0x40                   };
-//     gps_set_okay=0;
-//     while(!gps_set_okay)
-//     {
-//     sendUBX(setRMC, sizeof(setRMC)/sizeof(uint8_t));
-//     gps_set_okay=getUBX_ACK(setRMC);
-//     }
-
 //    // Turning off all GPS NMEA strings apart from GPGGA (fix information) on the uBlox modules
-//    ss.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");
-//    ss.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");
-//    ss.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");
-//    ss.print("$PUBX,40,GSV,0,0,0,0*59\r\n");
-//    ss.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");
-//    ss.print("$PUBX,40,RMC,0,0,0,0*47\r\n");    
+// we need lat, lon, alt, HDOP  --> keep GGA, GSA
+    ss.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");  // GLL = Lat/Lon
+    ss.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");  // ZDA = date, time
+    ss.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");  // VTG = Vector Track and speed over ground
+    ss.print("$PUBX,40,GSV,0,0,0,0*59\r\n");  //GSV = Detailed satellite data
+//    ss.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");  // GSA = Overall Satelite data
+    ss.print("$PUBX,40,RMC,0,0,0,0*47\r\n");    // RMC = recommended minimum data for GPS, no Alt
 //    // can switch off GGA if you want to do manual polling...
-//    ss.println("$PUBX,40,GGA,0,0,0,0*5A");
+//    ss.println("$PUBX,40,GGA,0,0,0,0*5A");   // GGA = Fix information
 
-//    // manual polling is to send a request:
+//    // manual polling is possible to instruct gps output one specific string:
 //    ss.println("$PUBX,00*33");
-    
+
     // infinite loop for GPS testing...
     while(1)  {
       if(ss.available()) {
@@ -383,6 +380,7 @@ void gps_wakeup() {
   Serial.println("\nGwitching GPS to Wake up mode. ");
   
 }
+
 void gps_read_data_and_adjust_power() {
   Serial.println("\nRead GPS.. ");
     char c;
@@ -415,6 +413,7 @@ void gps_read_data_and_adjust_power() {
     // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
 
 }
+
 void gps_Snooze() {
   Serial.println("\nGwitching GPS to Snooze mode. ");
 
@@ -823,4 +822,23 @@ void loop_old() {
     }
     
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
