@@ -15,8 +15,6 @@
  // done: investigate OTAA, good description here: Moteino, LMIC and OTAA Walkthrough https://github.com/lukastheiler/ttn_moteino
  // TODO: OTAA test code can be tested on device
  
- // TODO: add GPS flightmode. Good test script seems available here:  https://ukhas.org.uk/guides:ublox6
- // done: GPS power save. The u-center software can be used to make the configurations you want. See: https://www.youtube.com/watch?v=iWd0gCOYsdo
  // TODO: if no good read from GPS in last 2 minutes, then reset arduino as a manual reset fixes the problem?? Or auto-reset every 120 minutes. investigate
 
  // TODO: Add arduino sleep mode: need to change the radio scheduler to inline mode? see https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
@@ -40,12 +38,7 @@
 
 SoftwareSerial ss(3, 2);  // ss RX, TX --> GPS TXD, RXD
 TinyGPS gps;
-
-bool GPS_values_are_valid = true;
-boolean  gpsEnergySavingWantsToActivate = false;      // this is set to true once gps fix is found
-long  gpsEnergySavingStartDelayMillis = 15000;        // Device starts in normal mode. Energy saving is started xx time after a gps fix was found.
-long  gpsEnergySavingWantsToActivateStartTime = 0;
-int  gpsEnergySavingActivated = false;                // this is set to true once energy saving is activated
+long gps_fix_count = 0;
 
 //////////////////////////////////////////////
 // LMIC and RFM95 mapping and things
@@ -62,8 +55,8 @@ int  gpsEnergySavingActivated = false;                // this is set to true onc
 #include "keys.h"  // the personal keys to identify our own nodes
 
 const unsigned  TX_INTERVAL = 50; //  250;  // transmit interval
-dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
-int  LMIC_DR_sequence_count = 12;
+const dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
+const int  LMIC_DR_sequence_count = 12;
 int  LMIC_DR_sequence_index = 0;
 const  lmic_pinmap lmic_pins = { .nss = 14,    .rxtx = LMIC_UNUSED_PIN,    .rst = 10,    .dio = {17, 16, 15}, };
 
@@ -89,12 +82,17 @@ int TX_COMPLETE_was_triggered = 0;  // 20170220 added to allow full controll in 
 //// Kaasfabriek routines for gps
 ////////////////////////////////////////////
 
-void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNumber)
+//void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNumber)
+void put_gpsvalues_into_sendbuffer(long l_lat, long l_lon, long l_alt, int hdopNumber)
 {    
-  uint32_t LatitudeBinary = ((flat + 90) / 180) * 16777215;
-  uint32_t LongitudeBinary = ((flon + 180) / 360) * 16777215;
-  uint16_t altitudeGps = alt;         // altitudeGps in meters, alt from tinyGPS is float in meters
-  if (alt<0) altitudeGps=0;   // unsigned int wil not allow negative values and warps them to huge number, needs to be zero'ed
+  //uint32_t LatitudeBinary = ((flat + 90) / 180) * 16777215;
+  //uint32_t LongitudeBinary = ((flon + 180) / 360) * 16777215;
+  //uint16_t altitudeGps = alt;         // altitudeGps in meters, alt from tinyGPS is float in meters
+  //if (alt<0) altitudeGps=0;   // unsigned int wil not allow negative values and warps them to huge number, needs to be zero'ed
+  uint32_t LatitudeBinary = ((l_lat + 90000000) / 180) * 16777215 / 1000000;
+  uint32_t LongitudeBinary = ((l_lon + 180000000) / 360) * 16777215 / 1000000;
+  uint16_t altitudeGps = l_alt/100;         // altitudeGps in meters, alt from tinyGPS is float in meters
+  if (l_alt<0) altitudeGps=0;   // unsigned int wil not allow negative values and warps them to huge number, needs to be zero'ed
   // uint8_t accuracy = hdopNumber*10;   // needs to be /10 instead of *10 as per example JP
   uint8_t accuracy = hdopNumber/10;   // from TinyGPS horizontal dilution of precision in 100ths, TinyGPSplus seems the same in 100ths as per MNEMA string
   
@@ -112,51 +110,73 @@ void put_gpsvalues_into_sendbuffer(float flat, float flon, float alt, int hdopNu
 
   // hdop in tenths of meter
   mydata[8] = accuracy & 0xFF;
+  
+  Serial.print(  "\nInto send buffer "); 
+  Serial.print("  LAT, LON=");
+  Serial.print( l_lat);   
+  Serial.print(", ");
+  Serial.print( l_lon); // 52.632656, 4.738389
+  Serial.print(" hdop=");
+  Serial.print( hdopNumber);
+  Serial.print(" alt=");
+  Serial.print( l_alt );
+  Serial.print(  "\nMydata[] = [");
+  for(int i=0; i<message_size; i++) {
+    Serial.print(mydata[i], HEX);
+  }
+  Serial.println("]");
 }
 
 void process_gps_values()
 { 
-  // retrieve some usefull values from GPS library
-  float flat, flon, alt;
+  // retrieve values from GPS library, and if valid put them into send buffer
+  //float flat, flon, alt;
+  long l_lat, l_lon, l_alt;
   unsigned long age; 
   int hdopNumber;  
+  bool GPS_values_are_valid = true;
   
-  gps.f_get_position(&flat, &flon, &age);  // lat -90.0 .. 90.0 as a 4 byte float, lon -180 .. 180 as a 4 byte float, age in 1/1000 seconds as a 4 byte unsigned long
-  alt = gps.f_altitude();    // signed float altitude in meters
+  //gps.f_get_position(&flat, &flon, &age);  // lat -90.0 .. 90.0 as a 4 byte float, lon -180 .. 180 as a 4 byte float, age in 1/1000 seconds as a 4 byte unsigned long
+  gps.get_position(&l_lat, &l_lon, &age);  // lat -90.0 .. 90.0 as a 4 byte float, lon -180 .. 180 as a 4 byte float, age in 1/1000 seconds as a 4 byte unsigned long
+  //alt = gps.f_altitude();    // signed float altitude in meters
+  l_alt = gps.altitude();    // signed float altitude in meters
   hdopNumber = gps.hdop();   // int 100ths of a meter
 
   // check if possibly invalid
-  GPS_values_are_valid = true;
-  if (flat == TinyGPS::GPS_INVALID_F_ANGLE)    GPS_values_are_valid = false;
-  if (flon == TinyGPS::GPS_INVALID_F_ANGLE)    GPS_values_are_valid = false;
+  //if (flat == TinyGPS::GPS_INVALID_F_ANGLE)    GPS_values_are_valid = false;
+  //if (flon == TinyGPS::GPS_INVALID_F_ANGLE)    GPS_values_are_valid = false;
+  if (l_lat == TinyGPS::GPS_INVALID_ANGLE)    GPS_values_are_valid = false;
+  if (l_lon == TinyGPS::GPS_INVALID_ANGLE)    GPS_values_are_valid = false;
   if (hdopNumber == TinyGPS::GPS_INVALID_HDOP) GPS_values_are_valid = false;
   if (age == TinyGPS::GPS_INVALID_AGE)         GPS_values_are_valid = false;
   
-  if (alt == TinyGPS::GPS_INVALID_F_ALTITUDE)  GPS_values_are_valid = false;   // if alt, hdop remain giving errors, possibly the GPS character read misses every start few characters of every feed. Solution: make the code lighter so it returns quicker to character read. Or process a bit of buffer while doing other actions, see TinyGPS example.
+  //if (alt == TinyGPS::GPS_INVALID_F_ALTITUDE)  GPS_values_are_valid = false;   // if alt, hdop remain giving errors, possibly the GPS character read misses every start few characters of every feed. Solution: make the code lighter so it returns quicker to character read. Or process a bit of buffer while doing other actions, see TinyGPS example.
+  if (l_alt == TinyGPS::GPS_INVALID_ALTITUDE)  GPS_values_are_valid = false;   // if alt, hdop remain giving errors, possibly the GPS character read misses every start few characters of every feed. Solution: make the code lighter so it returns quicker to character read. Or process a bit of buffer while doing other actions, see TinyGPS example.
 
   // if valid, put into buffer
-  if (GPS_values_are_valid) put_gpsvalues_into_sendbuffer( flat, flon, alt, hdopNumber);
-    // after init, sendbuffer holds 0,0 lovation; after first fix it will retain the last valid location
+  //if (GPS_values_are_valid) put_gpsvalues_into_sendbuffer( flat, flon, alt, hdopNumber);
+  if (GPS_values_are_valid) put_gpsvalues_into_sendbuffer( l_lat, l_lon, l_alt, hdopNumber);
+  // after init, sendbuffer holds 0,0 lovation; after first fix it will retain the last valid location
   
   #ifdef DEBUG
   Serial.println();
   Serial.print("Data: ");
   if (GPS_values_are_valid) Serial.print("(valid) ");
   if (!GPS_values_are_valid) Serial.print("(** INVALID");
-  if (flat == TinyGPS::GPS_INVALID_F_ANGLE)    {Serial.print(" lat="); Serial.print(flat);}
-  if (flon == TinyGPS::GPS_INVALID_F_ANGLE)    {Serial.print(" lon="); Serial.print(flon);}
+  if (l_lat == TinyGPS::GPS_INVALID_ANGLE)    {Serial.print(" lat="); Serial.print(flat);}
+  if (l_lon == TinyGPS::GPS_INVALID_ANGLE)    {Serial.print(" lon="); Serial.print(flon);}
   if (hdopNumber == TinyGPS::GPS_INVALID_HDOP) {Serial.print(" hdop="); Serial.print(hdopNumber);}
   if (age == TinyGPS::GPS_INVALID_AGE)         {Serial.print(" age="); Serial.print(age);}
-  if (alt == TinyGPS::GPS_INVALID_F_ALTITUDE)  {Serial.print(" alt="); Serial.print(alt);}
+  if (l_alt == TinyGPS::GPS_INVALID_ALTITUDE)  {Serial.print(" alt="); Serial.print(alt);}
   if (!GPS_values_are_valid) Serial.print(" **) ");
   Serial.print("  LAT, LON=");
-  Serial.print( flat, 6);   
+  Serial.print( l_lat);   
   Serial.print(", ");
-  Serial.print(flon, 6); // 52.632656, 4.738389
+  Serial.print( l_lon); // 52.632656, 4.738389
   Serial.print(" hdop=");
   Serial.print( hdopNumber);
   Serial.print(" alt=");
-  Serial.print( alt );
+  Serial.print( l_alt );
   Serial.print(" AGE=");
   Serial.print(age);
   Serial.println("");
@@ -184,33 +204,12 @@ void process_gps_values()
     Serial.println("GPS Data is fresh (age less than 5 seconds)");
   Serial.print("For TTN message LatitudeBinary, LongitudeBinary, altitudeGps, accuracy: ");
   Serial.println("expected   CA DA F. 83 5E 9. 0 .. .. " );     
-  Serial.println("    dummy   7F FF FF 7F FF FF 0 0 0 " );    
-  Serial.print(  "mydata[] = ");
-  Serial.print( mydata[0], HEX );
-  Serial.print(" ");
-  Serial.print( mydata[1], HEX );
-  Serial.print(" ");
-  Serial.print( mydata[2], HEX );
-  Serial.print(" ");
-  Serial.print( mydata[3], HEX );
-  Serial.print(" ");
-  Serial.print( mydata[4], HEX );
-  Serial.print(" ");
-  Serial.print( mydata[5], HEX );
-  Serial.print(" ");
-  Serial.print( mydata[6], HEX );
-  if (message_size>6) Serial.print(" ");
-  if (message_size>6) Serial.print( mydata[7], HEX );
-  if (message_size>7) Serial.print(" ");
-  if (message_size>7) Serial.print( mydata[8], HEX );
-  if (message_size>8) Serial.print(" / ");
-  if (message_size>8) Serial.print( mydata[9], HEX );
-  if (message_size>9) Serial.print(" ");
-  if (message_size>9) Serial.print( mydata[10], HEX );
-  if (message_size>10) Serial.print(" ");
-  if (message_size>10) Serial.print( mydata[11], HEX );
-  if (message_size>11) Serial.print(" ");
-  if (message_size>11) Serial.print( mydata[12], HEX );
+  Serial.println("    dummy   7F FF FF 7F FF FF 0 0 0 " );
+  
+  Serial.print(  "mydata[] = [");
+  for(int i=0; i<message_size; i++) {
+    Serial.print(mydata[i], HEX);
+  }
   Serial.println("]");
   #endif    // debug_xl
 }
@@ -242,7 +241,7 @@ boolean getUBX_ACK(uint8_t *MSG) {
   uint8_t ackByteID = 0;
   uint8_t ackPacket[10];
   unsigned long startTime = millis();
-  Serial.print(" * Reading ACK ");
+  Serial.print(" Reading ACK ");
  
   // Construct the expected ACK packet    
   ackPacket[0] = 0xB5;  // header
@@ -265,13 +264,13 @@ boolean getUBX_ACK(uint8_t *MSG) {
     // Test for success
     if (ackByteID > 9) {
       // All packets in order!
-      Serial.println(" (GPS cmd okay)");
+      Serial.println("\n(GPS cmd okay)");
       return true;
     }
  
     // Timeout if no valid response in 3 seconds
     if (millis() - startTime > 3000) { 
-      Serial.println(" (GPS cmd timeout)");
+      Serial.println("\n(GPS cmd timeout)");
       //ss.flush();  // try to fix
       return false;
     }
@@ -308,43 +307,52 @@ void gps_init() {
     //ss.print("$PUBX,41,1,0007,0003,4800,0*13\r\n"); 
     //ss.begin(4800);
     //ss.flush();
+
+    gps_requestColdStart();
+    gps_setStrings();
+    gps_setNavMode(3); // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g
+    gps_setPowerMode(1);  // 1=max power, 2=eco, 3=cyclic power save
     
-//    gps_SetMode_gpsOn();
-//    gps_setNavMode(6);  // 6 = airborne 1g, max 50km
-//    //gps_setDataRate(1);
-//    gps_setStrings();
-//    gps_setPowerMode(2);
- 
-//    // infinite loop for GPS testing...
-//    while(1)  {
-//      if(ss.available()) {
-//        char c = ss.read();
-//        Serial.write(c); 
-//        if (gps.encode(c)) {   // Did a new valid sentence come in?
-//          Serial.print(" [valid] ");
-//        }
-//      }
-//    }
-  
+    Serial.println("\Reading GPS in full power mode until a fix is found ");
+    while(gps_fix_count==0) {
+      gps_read_5sec();
+    }
+    Serial.println("\GPS fix was found ");
+
+    gps_setPowerMode(2);
 }
 
-void gps_read_data_and_adjust_power() {
+void gps_read(int countdown) {
+  while (countdown > 0) {
+    if(ss.available()) {       
+      countdown--;
+      char c = ss.read();
+      Serial.write(c); 
+      if (gps.encode(c)) {   // Did a new valid sentence come in?
+        gps_fix_count++;
+        process_gps_values();
+        Serial.print(" [fix] "); 
+      }
+    }
+  }
+}
+
+void gps_read_5sec() {
   Serial.println("\nRead GPS ");
     char c;
     unsigned long start = millis();
     do {   
       while (ss.available()) {
         char c = ss.read();
-        //Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+        Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         #ifdef DEBUG_XL
         Serial.write(c); // uncomment this line if you want to see the GPS data flowing
         #endif
         
         if (gps.encode(c)) { // Did a new valid sentence come in?
+            gps_fix_count++;
             process_gps_values();
-            //show me something
-            Serial.print("gps ");
-            
+            Serial.print(" [fix] ");            
          }          
       }
     } while (millis() - start < 5000); // explanation:
@@ -354,8 +362,8 @@ void gps_read_data_and_adjust_power() {
     // if too high a value then system wil delay scheduled jobs and the LMIC send sequence will take too long
 }
 
-void gps_setNavMode(int mode) {
-  Serial.print("\nGPS Set Nav mode ");    
+void gps_setNavMode(int mode) { // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g
+  Serial.print("\n\nGPS Set Nav mode ");    
   Serial.println(mode);
 
   //Generate the configuration string for Navigation Mode
@@ -382,6 +390,7 @@ void gps_setNavMode(int mode) {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
+  gps_read(300);
 
   //  ----- the internet has told us:
   //  #define UBLOX_STATIONARY 0xB5,0x62,0x06,0x24,0x24,0x00,0xFF,0xFF, 0x03,0x02,0x00,0x00,0x00,0x00,0x10,0x27,0x00,0x00,0x05,0x00,0xFA,0x00,0xFA,0x00,0x64,0x00,0x2C,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x12,0x54
@@ -397,95 +406,96 @@ void gps_setNavMode(int mode) {
 
 }
 
-void gps_setDataRate(int rate) {
-//  Serial.println("\nGPS Set data rate ");
-//  Serial.println(rate);
-//
-////    //DataRate:  http://playground.arduino.cc/UBlox/GPS
-////    //1Hz     = 0xE8 0x03
-////    //2Hz     = 0xF4 0x01
-////    //3Hz     = 0x4D 0x01
-////    //3.33Hz  = 0x2C 0x01
-////    //4Hz     = 0xFA 0x00
-////    //5Hz     = 0xC8 0x00
-//
-//  byte datarate01;
-//  byte datarate02;
-//  switch (rate) {
-//    case 1:
-//      datarate01 = 0xE8;
-//      datarate02 = 0x03;
-//      break;
-//    case 2:
-//      datarate01 = 0xF4;
-//      datarate02 = 0x01;
-//      break;
-//    case 3:
-//      datarate01 = 0x4D;
-//      datarate02 = 0x01;
-//      break;
-//    case 4:
-//      datarate01 = 0xFA;
-//      datarate02 = 0x00;
-//      break;
-//    default: 
-//      // assume 5
-//      datarate01 = 0xC8;
-//      datarate02 = 0x00;
-//      break;
-//    break;
-//  }
-//  
-//  byte arrCommand[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, datarate01, datarate02, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00};
-//  calcChecksum(&arrCommand[2], sizeof(arrCommand) - 4);
-//  byte gps_okay=0;
-//  while(!gps_okay) {
-//    sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
-//    gps_okay=getUBX_ACK(arrCommand);
-//  }
-//    
-////  #define UBLOX_1HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xE8,0x03,  0x01,0x00,0x01,0x00,0x01,0x39       // set rate to 1Hz
-////  #define UBLOX_2HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xF4,0x01,  0x01,0x00,0x01,0x00,0x0B,0x77       // set rate to 2Hz
-////  #define UBLOX_3HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0x4D,0x01,  0x01,0x00,0x01,0x00,0x64,0x8D       // set rate to 3Hz
-////  #define UBLOX_4HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xFA,0x00,  0x01,0x00,0x01,0x00,0x10,0x96       // set rate to 4Hz
-////  #define UBLOX_5HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xC8,0x00,  0x01,0x00,0x01,0x00,0xDE,0x6A       // set rate to 5Hz
+void gps_setDataRate(int rate) { // 1=1Hz, 2=2Hz, 3=3Hz, 4=4Hz, 5=5Hz
+  Serial.println("\n\nGPS Set data rate ");
+  Serial.println(rate);
+
+//    //DataRate:  http://playground.arduino.cc/UBlox/GPS
+//    //1Hz     = 0xE8 0x03
+//    //2Hz     = 0xF4 0x01
+//    //3Hz     = 0x4D 0x01
+//    //3.33Hz  = 0x2C 0x01
+//    //4Hz     = 0xFA 0x00
+//    //5Hz     = 0xC8 0x00
+
+  byte datarate01;
+  byte datarate02;
+  switch (rate) {
+    case 1:
+      datarate01 = 0xE8;
+      datarate02 = 0x03;
+      break;
+    case 2:
+      datarate01 = 0xF4;
+      datarate02 = 0x01;
+      break;
+    case 3:
+      datarate01 = 0x4D;
+      datarate02 = 0x01;
+      break;
+    case 4:
+      datarate01 = 0xFA;
+      datarate02 = 0x00;
+      break;
+    default: 
+      // assume 5
+      datarate01 = 0xC8;
+      datarate02 = 0x00;
+      break;
+    break;
+  }
+  
+  byte arrCommand[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, datarate01, datarate02, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00};
+  calcChecksum(&arrCommand[2], sizeof(arrCommand) - 4);
+  byte gps_okay=0;
+  while(!gps_okay) {
+    sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
+    gps_okay=getUBX_ACK(arrCommand);
+  }
+  gps_read(100);
+    
+//  #define UBLOX_1HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xE8,0x03,  0x01,0x00,0x01,0x00,0x01,0x39       // set rate to 1Hz
+//  #define UBLOX_2HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xF4,0x01,  0x01,0x00,0x01,0x00,0x0B,0x77       // set rate to 2Hz
+//  #define UBLOX_3HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0x4D,0x01,  0x01,0x00,0x01,0x00,0x64,0x8D       // set rate to 3Hz
+//  #define UBLOX_4HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xFA,0x00,  0x01,0x00,0x01,0x00,0x10,0x96       // set rate to 4Hz
+//  #define UBLOX_5HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xC8,0x00,  0x01,0x00,0x01,0x00,0xDE,0x6A       // set rate to 5Hz
 }
 
 void gps_setStrings() {
-  Serial.println("\nGPS switch off some data strings ");
+  Serial.println("\n\nGPS switch off some data strings ");
 
-//    // Turning off all GPS NMEA strings apart from GPGGA (fix information) on the uBlox modules
-// we need lat, lon, alt, HDOP  --> keep GGA, GSA
-    ss.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");  // GLL = Lat/Lon
-    ss.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");  // ZDA = date, time
-    ss.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");  // VTG = Vector Track and speed over ground
-    ss.print("$PUBX,40,GSV,0,0,0,0*59\r\n");  //GSV = Detailed satellite data
-//   // ss.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");  // GSA = Overall Satelite data
-    ss.print("$PUBX,40,RMC,0,0,0,0*47\r\n");    // RMC = recommended minimum data for GPS, no Alt
-////    // can switch off GGA if you want to do manual polling...
-//    ss.println("$PUBX,40,GGA,0,0,0,0*5A");   // GGA = Fix information
+  // Turning off all GPS NMEA strings apart from GPGGA (fix information) on the uBlox modules
+  // we need lat, lon, alt, HDOP  --> keep GGA, GSA
+  ss.print("$PUBX,40,GLL,0,0,0,0*5C\r\n");  // GLL = Lat/Lon
+  ss.print("$PUBX,40,ZDA,0,0,0,0*44\r\n");  // ZDA = date, time
+  ss.print("$PUBX,40,VTG,0,0,0,0*5E\r\n");  // VTG = Vector Track and speed over ground
+  ss.print("$PUBX,40,GSV,0,0,0,0*59\r\n");  //GSV = Detailed satellite data
+  ss.print("$PUBX,40,RMC,0,0,0,0*47\r\n");    // RMC = recommended minimum data for GPS, no Alt
+  // ss.print("$PUBX,40,GSA,0,0,0,0*4E\r\n");  // GSA = Overall Satelite data
+  // ss.println("$PUBX,40,GGA,0,0,0,0*5A");   // GGA = Fix information
 
-//    // manual polling is possible to instruct gps output one specific string:
-//    ss.println("$PUBX,00*33");
+  gps_read(300);
 
-//  #define GGA_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x00,0x00,0xFA,0x0F                            // switch GGA off
-//  #define GLL_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x01,0x00,0xFB,0x11                            // switch GLL off
-//  #define GSA_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x02,0x00,0xFC,0x13                            // switch GSA off
-//  #define GSV_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x03,0x00,0xFD,0x15                            // switch GSV off
-//  #define RMC_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x04,0x00,0xFE,0x17                            // switch RMC off
-//  #define VTG_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x05,0x00,0xFF,0x19                            // switch VTG off
-//  #define POSLLH_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x02,0x01,0x0E,0x47                            // set POSLLH MSG rate
-//  #define STATUS_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x03,0x01,0x0F,0x49                            // set STATUS MSG rate
-//  #define SOL_ON           0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x06,0x01,0x12,0x4F                            // set SOL MSG rate
-//  #define VELNED_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x12,0x01,0x1E,0x67                            // set VELNED MSG rate
-//  #define SVINFO_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x30,0x01,0x3C,0xA3                            // set SVINFO MSG rate
-//  #define TIMEUTC_ON       0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x21,0x01,0x2D,0x85                            // set TIMEUTC MSG rate
-//  #define SBAS_ON          0xB5,0x62,0x06,0x16,0x08,0x00,0x03,0x07,0x03,0x00,0x51,0x08,0x00,0x00,0x8A,0x41   // set WAAS to EGNOS
-
+  //    // manual polling is possible to instruct gps output one specific string:
+  //    ss.println("$PUBX,00*33");
+  
+  //  #define GGA_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x00,0x00,0xFA,0x0F                            // switch GGA off
+  //  #define GLL_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x01,0x00,0xFB,0x11                            // switch GLL off
+  //  #define GSA_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x02,0x00,0xFC,0x13                            // switch GSA off
+  //  #define GSV_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x03,0x00,0xFD,0x15                            // switch GSV off
+  //  #define RMC_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x04,0x00,0xFE,0x17                            // switch RMC off
+  //  #define VTG_OFF          0xB5,0x62,0x06,0x01,0x03,0x00,0xF0,0x05,0x00,0xFF,0x19                            // switch VTG off
+  //  #define POSLLH_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x02,0x01,0x0E,0x47                            // set POSLLH MSG rate
+  //  #define STATUS_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x03,0x01,0x0F,0x49                            // set STATUS MSG rate
+  //  #define SOL_ON           0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x06,0x01,0x12,0x4F                            // set SOL MSG rate
+  //  #define VELNED_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x12,0x01,0x1E,0x67                            // set VELNED MSG rate
+  //  #define SVINFO_ON        0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x30,0x01,0x3C,0xA3                            // set SVINFO MSG rate
+  //  #define TIMEUTC_ON       0xB5,0x62,0x06,0x01,0x03,0x00,0x01,0x21,0x01,0x2D,0x85                            // set TIMEUTC MSG rate
+  //  #define SBAS_ON          0xB5,0x62,0x06,0x16,0x08,0x00,0x03,0x07,0x03,0x00,0x51,0x08,0x00,0x00,0x8A,0x41   // set WAAS to EGNOS
 }
 
 void gps_setBaud() {
-  Serial.println("\nGPS set baud rate ");
+  Serial.println("\n\nGPS set baud rate ");
 
 //  #define UBLOX_115200     0xB5,0x62,0x06,0x00,0x14,0x00,0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x00,0xC2,0x01,0x00,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0xBE,0x72 //set speed to 115200
 //  #define UBLOX_57600      0xB5,0x62,0x06,0x00,0x14,0x00,0x01,0x00,0x00,0x00,0xD0,0x08,0x00,0x00,0x00,0xE1,0x00,0x00,0x07,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0xDC,0xBD //set speed to 57600
@@ -495,8 +505,8 @@ void gps_setBaud() {
 
 }
 
-void gps_setPowerMode(int mode) {
-  Serial.print("\nGPS set power mode ");
+void gps_setPowerMode(int mode) {  // 1=max power, 2=eco, 3=cyclic power save
+  Serial.print("\n\nGPS set power mode ");
   Serial.println(mode);
 
   byte powerMode;
@@ -525,10 +535,11 @@ void gps_setPowerMode(int mode) {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
+  gps_read(100);
 }
 
 void gps_setPowerMode2() {
-  Serial.println("\nGPS set cyclic power mode ");
+  Serial.println("\n\nGPS set cyclic power mode ");
 
     //CFG-PM2
     //Not sure what the implication of "do not enter 'inactive for search' state when no fix" is.
@@ -544,7 +555,7 @@ void gps_setPowerMode2() {
 }
 
 void gps_SetMode_gpsOff() {
-  Serial.println("\nGPS off ");
+  Serial.println("\n\nGPS off ");
   
   ////Set GPS to backup mode (sets it to never wake up on its own) minimal current draw <5mA, loses all settings
   //uint8_t GPSoff[] = {0xB5, 0x62, 0x02, 0x41, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x4D, 0x3B};
@@ -558,10 +569,11 @@ void gps_SetMode_gpsOff() {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
+  // after this command no gps output is available
 }
 
 void gps_SetMode_gpsOn() {
-  Serial.println("\nGPS on ");
+  Serial.println("\n\nGPS on ");
 
   byte arrCommand[] = {0xB5, 0x62, 0x02, 0x41, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x4C, 0x37};
   calcChecksum(&arrCommand[2], sizeof(arrCommand) - 4);
@@ -570,10 +582,11 @@ void gps_SetMode_gpsOn() {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
+  gps_read(300);
 }
 
 void gps_SetMode_gpsRfOff() {
-  Serial.println("\nGPS RF off ");
+  Serial.println("\n\nGPS RF off ");
 
   ////Switch the RF GPS section off, draws about 5mA, retains its settings, wakes on serial command.
   //uint8_t GPSoff[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00,0x08, 0x00, 0x16, 0x74}
@@ -586,10 +599,11 @@ void gps_SetMode_gpsRfOff() {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
+  // after this command no further gps output is available
 }
 
 void gps_SetMode_gpsRfOn() {
-  Serial.println("\nGPS RF on ");
+  Serial.println("\n\nGPS RF on ");
 
   byte arrCommand[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00,0x09, 0x00, 0x17, 0x76};
   calcChecksum(&arrCommand[2], sizeof(arrCommand) - 4);
@@ -598,10 +612,11 @@ void gps_SetMode_gpsRfOn() {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
+  gps_read(100);
 }
 
 void gps_requestColdStart() {
-  Serial.println("\nGPS cold start ");
+  Serial.println("\n\nGPS cold start ");
 
   //GPS Cold Start (Forced Watchdog)
   //0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0x87, 0x00, 0x00, 0x94, 0xF5
@@ -613,6 +628,7 @@ void gps_requestColdStart() {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
+  gps_read(300);
 }
 
 //////////////////////////////////////////////////
@@ -662,10 +678,7 @@ void do_send(){
         if (message_size>11) Serial.print( mydata[12], HEX );
         Serial.print("]    ");
         
-        Serial.print("DR [ ");
-        Serial.print( LMIC_DR_sequence_index );
-        Serial.print(" ] = ");
-        Serial.print( LMIC_DR_sequence[LMIC_DR_sequence_index] );
+        Serial.print("DR = ");
         if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF7) Serial.print(" DR_SF7 "); 
         if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF8) Serial.print(" DR_SF8 "); 
         if ( LMIC_DR_sequence[LMIC_DR_sequence_index]==DR_SF9) Serial.print(" DR_SF9 "); 
@@ -899,7 +912,7 @@ void put_other_values_into_sendbuffer() {
 void setup() {
     Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
     
-    Serial.print("\n\nStarting "); Serial.print(myDeviceName); Serial.print(" ("); Serial.print(DEVADDR); Serial.println(") ");
+    Serial.print("\n\nStarting "); Serial.print(myDeviceName); Serial.print(" dev="); Serial.print(DEVADDR); Serial.println(" ");
     Serial.println();
 
 
@@ -934,20 +947,20 @@ void loop() {
     Serial.println("\nRead GPS ");
 
     //gps_wakeup();
-    gps_read_data_and_adjust_power();
+    gps_read_5sec();
     //gps_Snooze();
 
     Serial.println("\other values ");
     put_other_values_into_sendbuffer();
     
-    Serial.println("\nSending TTN message ");
-    do_send();
-    Serial.println("Waiting..");  
-    while (TX_COMPLETE_was_triggered == 0) {
-      os_runloop_once();     // system picks up just the first job from all scheduled jobs, needed for the scheduled and interrupt tasks
-    }
-    TX_COMPLETE_was_triggered = 0;
-    Serial.println("TX_COMPLETE");
+//    Serial.println("\nSending TTN message ");
+//    do_send();
+//    Serial.println("Waiting..");  
+//    while (TX_COMPLETE_was_triggered == 0) {
+//      os_runloop_once();     // system picks up just the first job from all scheduled jobs, needed for the scheduled and interrupt tasks
+//    }
+//    TX_COMPLETE_was_triggered = 0;
+//    Serial.println("TX_COMPLETE");
     
     
 //    Serial.println("\nSleep the GPS ");
