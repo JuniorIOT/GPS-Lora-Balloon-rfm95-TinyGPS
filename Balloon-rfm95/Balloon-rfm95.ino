@@ -305,6 +305,7 @@ void gps_init() {
     //ss.flush();
 
     //gps_requestColdStart();  // DO NOT USE: it seems this does a FACTORY RESET and delays getting a solid fix
+    gps_SetMode_gpsRfOn();
     gps_setStrings();
     gps_setNavMode(3); // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g
     
