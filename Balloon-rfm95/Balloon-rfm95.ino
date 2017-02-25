@@ -23,7 +23,6 @@
  // TODO: Create and apply new device ID
 
 //#define DEBUG     // if DEBUG is defined, some code is added to display some basic debug info
-//#define DEBUG_XL  // if DEBUG_XL is defined, some code is added to display more detailed debug info
 
 //#include "LowPower.h"   // help to do power save on the arduino  https://github.com/rocketscream/Low-Power
 
@@ -55,7 +54,7 @@ long gps_nofix_count = 0;
 #include <SPI.h>  //MISO MOSI SCK stuff
 #include "keys.h"  // the personal keys to identify our own nodes
 
-const unsigned  TX_INTERVAL = 50; //  250;  // transmit interval
+const unsigned  TX_INTERVAL = 60; //  250;  // transmit interval, 5minutes is healthy according to TTN rules
 const dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
 const int  LMIC_DR_sequence_count = 12;
 int  LMIC_DR_sequence_index = 0;
@@ -291,38 +290,50 @@ boolean getUBX_ACK(uint8_t *MSG) {
 }
 
 void gps_init() {
-    // load the send buffer with dummy location 0,0. This location 0,0 is recognized as dummy by TTN Mapper and will be ignored
-    put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
-    
-    // GPS serial starting
-    ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
-                            // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
+  // load the send buffer with dummy location 0,0. This location 0,0 is recognized as dummy by TTN Mapper and will be ignored
+  put_gpsvalues_into_sendbuffer( 0, 0, 0, 0);
   
-    //   https://ukhas.org.uk/guides:ublox6
-    // THE FOLLOWING COMMAND SWITCHES MODULE TO 4800 BAUD
-    //ss.print(F("$PUBX,41,1,0007,0003,4800,0*13\r\n")); 
-    //ss.begin(4800);
-    //ss.flush();
+  // GPS serial starting
+  ss.begin(9600);         // software serial with GPS module. Reviews tell us software serial is not best choice; 
+                          // https://www.pjrc.com/teensy/td_libs_TinyGPS.html explains to use UART Serial or NewSoftSerial 
 
-    //gps_requestColdStart();  // DO NOT USE: it seems this does a FACTORY RESET and delays getting a solid fix
-    gps_SetMode_gpsRfOn();
-    gps_setStrings();
-    gps_setNavMode(3); // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g
-    
-    gps_read_fullpower_until_fix();
-    gps_setPowerMode(2);
+  //   https://ukhas.org.uk/guides:ublox6
+  // THE FOLLOWING COMMAND SWITCHES MODULE TO 4800 BAUD
+  //ss.print(F("$PUBX,41,1,0007,0003,4800,0*13\r\n")); 
+  //ss.begin(4800);
+  //ss.flush();
+
+  //gps_requestColdStart();  // DO NOT USE: it seems this does a FACTORY RESET and delays getting a solid fix
+  gps_SetMode_gpsRfOn();
+  gps_setStrings();
+  gps_setNavMode(4); // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g
+  
+  gps_setPowerMode(1);  // 1=max power, 2=eco, 3=cyclic power save
+  gps_read_until_fix_or_timeout(60 * 60);  // time to first fix can be 15 minutes (or multiple). after factory reset, gps needs to acquire full data which is sent out once every 15 minutes; sat data sent out once every 5 minutes
+  //gps_setPowerMode(2);
 }
 
-void gps_read_fullpower_until_fix() {
-    Serial.println(F("\nReading in full power until fix is found"));
-    gps_setPowerMode(1);  // 1=max power, 2=eco, 3=cyclic power save
-    while(gps_fix_count==0) {
-      gps_read_5sec();
-    }
+void gps_read_until_fix_or_timeout(unsigned long timeOut) {
+  Serial.print(F("\nRead GPS until fix is found or time-out at "));
+  Serial.print(timeOut);
+  Serial.println(F(" sec"));
+  
+  unsigned long timeoutTime = millis() + timeOut * 1000;
+  long gps_fix_count_old = gps_fix_count;
+  
+  while(gps_fix_count==0 && millis() < timeoutTime) {
+    gps_read_5sec();
+  }
+  
+  if (gps_fix_count == gps_fix_count_old) {
+    Serial.println(F("\nNO FIX FOUND"));
+    gps_nofix_count++; // we want to know how many times no fix was found
+  } else {
     Serial.println(F("\nFix was found"));
+  }
 }
     
-void gps_read(int countdown) {
+void gps_read_chars(int countdown) {
   while (countdown > 0) {
     if(ss.available()) {       
       countdown--;
@@ -338,11 +349,11 @@ void gps_read(int countdown) {
 }
 
 void gps_read_5sec() {
-  Serial.print(F("\nRead GPS, total fixes "));
+  Serial.print(F("\nGPS fixes: "));
   Serial.print(gps_fix_count);
-  Serial.print(F(", total miss "));
+  Serial.print(F(" non-fixes: "));
   Serial.print(gps_nofix_count);
-  Serial.println(F(". Reading GPS: "));
+  Serial.println(F(". Reading GPS. "));
 
   char c;
   long gps_fix_count_old = gps_fix_count;
@@ -350,9 +361,9 @@ void gps_read_5sec() {
   do {   
     while (ss.available()) {
       char c = ss.read();
-      #ifdef DEBUG
+      //#ifdef DEBUG
       Serial.write(c); 
-      #endif
+      //#endif
       
       if (gps.encode(c)) { // Did a new valid sentence come in?
           gps_fix_count++;
@@ -362,7 +373,7 @@ void gps_read_5sec() {
     }
   } while (millis() - startTime < 5000); // reading for 5 seconds
 
-  if (gps_fix_count != gps_fix_count_old) gps_nofix_count++; // we want to know how many times no fix was found
+  if (gps_fix_count == gps_fix_count_old) gps_nofix_count++; // we want to know how many times no fix was found
 }
 
 void gps_setNavMode(int mode) { // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g
@@ -393,7 +404,7 @@ void gps_setNavMode(int mode) { // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
-  gps_read(300);
+  gps_read_chars(300);
 
   //  ----- the internet has told us:
   //  #define UBLOX_STATIONARY 0xB5,0x62,0x06,0x24,0x24,0x00,0xFF,0xFF, 0x03,0x02,0x00,0x00,0x00,0x00,0x10,0x27,0x00,0x00,0x05,0x00,0xFA,0x00,0xFA,0x00,0x64,0x00,0x2C,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x12,0x54
@@ -455,7 +466,7 @@ void x_gps_setDataRate(int rate) { // 1=1Hz, 2=2Hz, 3=3Hz, 4=4Hz, 5=5Hz
 //    sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
 //    gps_okay=getUBX_ACK(arrCommand);
 //  }
-//  gps_read(100);
+//  gps_read_chars(100);
 //    
     //#define UBLOX_1HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xE8,0x03,  0x01,0x00,0x01,0x00,0x01,0x39       // set rate to 1Hz
     //#define UBLOX_2HZ        0xB5,0x62,0x06,0x08,0x06,0x00,   0xF4,0x01,  0x01,0x00,0x01,0x00,0x0B,0x77       // set rate to 2Hz
@@ -477,7 +488,7 @@ void gps_setStrings() {
   // ss.print(F("$PUBX,40,GSA,0,0,0,0*4E\r\n"));  // GSA = Overall Satelite data
   // ss.println(F("$PUBX,40,GGA,0,0,0,0*5A"));   // GGA = Fix information
 
-  gps_read(300);
+  gps_read_chars(300);
 
   //    // manual polling is possible to instruct gps output one specific string:
   //    ss.println(F("$PUBX,00*33");
@@ -538,7 +549,7 @@ void gps_setPowerMode(int mode) {  // 1=max power, 2=eco, 3=cyclic power save
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
-  gps_read(100);
+  gps_read_chars(100);
 }
 
 void gps_setPowerMode2() {
@@ -585,7 +596,7 @@ void gps_SetMode_gpsOn() {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
-  gps_read(300);
+  gps_read_chars(300);
 }
 
 void gps_SetMode_gpsRfOff() {
@@ -615,7 +626,7 @@ void gps_SetMode_gpsRfOn() {
     sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
     gps_okay=getUBX_ACK(arrCommand);
   }
-  gps_read(100);
+  gps_read_chars(100);
 }
 
 void x_gps_requestColdStart() {  // this erases all and wipes usefull info
@@ -631,14 +642,13 @@ void x_gps_requestColdStart() {  // this erases all and wipes usefull info
 //    sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
 //    gps_okay=getUBX_ACK(arrCommand);
 //  }
-//  gps_read(300);
+//  gps_read_chars(300);
 }
 
 //////////////////////////////////////////////////
 // Kaasfabriek routines for rfm95
 ///////////////////////////////////////////////
 
-// void do_send(osjob_t* j){   20170220  do_send call is no longer scheduled in event handler
 void do_send(){  
   // starting vesion was same as https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
     
@@ -891,7 +901,7 @@ void put_other_values_into_sendbuffer() {
 void setup() {
     Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
     
-    Serial.print(F("\n\nStarting ")); Serial.println(myDeviceName); 
+    Serial.print(F("\n\n*** Starting ***\ndevice:")); Serial.println(myDeviceName); 
     Serial.println();
 
 
@@ -901,60 +911,51 @@ void setup() {
 }
 
 void loop() {
-
-    // TODO: rewrite to make linear:
-    // 1. get gps data
-    //  1a. wake up gps, resume previous performance level
-    //  1b. read a few cycles, adjust power settings, store any received good gps value
-    //    - not ever had a fix:                           go to 100% full performance
-    //    - not had one fix in previous 5x cycle time:    go to 100% full performance
-    //    - not had one fix in previous 2x cycle time:    go to half performance
-    //    - not had one fix in previous cycle time:       go to half performance
-    //    - had one fix in previous cycle time:           go to half performance
-    //    - had 3 or more fix in previous cycle time:     go to half performance
-    //    - had 1 fix in current cycle time:              go to half performance
-    //    - had 3 or more fix in current cycle time:      go to sleep mode, go to next step
-    //  1c. put gps into snooze mode
-    // 2. get other values = VCC, cpu_temp, processing time + prev send time in percent of total
-    // 3. send out TTN message as per example https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
-    //  3a. queue a message 
-    //  3b. wait and process system interrupts till TX complete
-    // 4. sleep to fill up time so one complete sycle is as per definition
+  unsigned long startTime = millis();
   
-    Serial.println();
-    Serial.println(F("\nRead GPS"));
+  Serial.println(F("\n\nRead GPS"));
 
-    //gps_wakeup();
-    gps_read_5sec();
-    //gps_Snooze();
+  //gps_wakeup();
+  gps_read_until_fix_or_timeout(5*60); // try up to 5 minutes to get a fix
+  gps_read_5sec();  // 5 sec extra to get stronger fix
+  //gps_Snooze();
 
-    Serial.println(F("\nRead values"));
-    put_other_values_into_sendbuffer();
-    
-    Serial.println(F("\nSending"));
-    do_send();
-    Serial.println(F("Waiting.."));  
-    while (TX_COMPLETE_was_triggered == 0) {
-      os_runloop_once();     // system picks up just the first job from all scheduled jobs, needed for the scheduled and interrupt tasks
-    }
-    TX_COMPLETE_was_triggered = 0;
-    Serial.println(F("TX_COMPL"));
-    
-    
-    Serial.println(F("\nSleep GPS"));
-    gps_SetMode_gpsRfOff();
-    
-    //LowPower.powerDown(SLEEP_4S, ADC_OFF, BOD_OFF);  
-    //Serial.println(F("sleep2 "));
-    //Sleepy::loseSomeTime(8000);  // max 60.000 (60 sec) 
-    //Serial.println(F("delay "));
+  Serial.println(F("\nRead values"));
+  put_other_values_into_sendbuffer();
+  
+  Serial.println(F("\nSending"));
+  do_send();
+  Serial.println(F("Waiting.."));  
+  while (TX_COMPLETE_was_triggered == 0) {
+    os_runloop_once();     // system picks up just the first job from all scheduled jobs, needed for the scheduled and interrupt tasks
+  }
+  TX_COMPLETE_was_triggered = 0;
+  Serial.println(F("TX_COMPL"));
+  
+  
+  Serial.print(F("\nSleep GPS "));
+  gps_SetMode_gpsRfOff();
 
-    // sleep does not work
-    delay(TX_INTERVAL * 1000);
-    
+  //=--=-=---=--=-=--=-=--=  START SLEEP HERE -=-=--=-=-=-=-==-=-=-
+
+  unsigned long processedTime = millis() - startTime;
+  long sleeptime = TX_INTERVAL * 1000 - processedTime;
+  if ( sleeptime < 0 ) sleeptime = 0;
+  Serial.print(sleeptime / 1000);
+  Serial.println(F(" sec"));
+  
+  //LowPower.powerDown(SLEEP_4S, ADC_OFF, BOD_OFF);    // this kind of sleep does not work
+  //Serial.println(F("sleep2 "));
+  //Sleepy::loseSomeTime(8000);  // max 60.000 (60 sec)  // this kind of sleep does not work
+  //Serial.println(F("delay "));
+  
+  delay(sleeptime);
+  
+  //=--=-=---=--=-=--=-=--=  SLEEP IS COMPLETED HERE -=-=--=-=-=-=-==-=-=-
+  
 //    gps_SetMode_gpsOn();
-    gps_SetMode_gpsRfOn();
-    Serial.println(F("Sleep done"));
+  gps_SetMode_gpsRfOn();
+  Serial.println(F("Sleep done"));
 }
 
 
