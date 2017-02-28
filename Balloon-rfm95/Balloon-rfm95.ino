@@ -309,7 +309,7 @@ void gps_init() {
   gps_setNavMode(4); // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g
   
   gps_setPowerMode(1);  // 1=max power, 2=eco, 3=cyclic power save
-  gps_read_until_fix_or_timeout(60 * 60);  // time to first fix can be 15 minutes (or multiple). after factory reset, gps needs to acquire full data which is sent out once every 15 minutes; sat data sent out once every 5 minutes
+  gps_read_until_fix_or_timeout(60 * 60);  // after factory reset, time to first fix can be 15 minutes (or multiple).  gps needs to acquire full data which is sent out once every 15 minutes; sat data sent out once every 5 minutes
   //gps_setPowerMode(2);
 }
 
@@ -321,7 +321,7 @@ void gps_read_until_fix_or_timeout(unsigned long timeOut) {
   unsigned long timeoutTime = millis() + timeOut * 1000;
   long gps_fix_count_old = gps_fix_count;
   
-  while(gps_fix_count==0 && millis() < timeoutTime) {
+  while(gps_fix_count==gps_fix_count_old && millis() < timeoutTime) {
     gps_read_5sec();
   }
   
@@ -483,10 +483,10 @@ void gps_setStrings() {
   ss.print(F("$PUBX,40,GLL,0,0,0,0*5C\r\n"));  // GLL = Lat/Lon
   ss.print(F("$PUBX,40,ZDA,0,0,0,0*44\r\n"));  // ZDA = date, time
   ss.print(F("$PUBX,40,VTG,0,0,0,0*5E\r\n"));  // VTG = Vector Track and speed over ground
-  ss.print(F("$PUBX,40,GSV,0,0,0,0*59\r\n"));  //GSV = Detailed satellite data
-  ss.print(F("$PUBX,40,RMC,0,0,0,0*47\r\n"));    // RMC = recommended minimum data for GPS, no Alt
-  // ss.print(F("$PUBX,40,GSA,0,0,0,0*4E\r\n"));  // GSA = Overall Satelite data
-  // ss.println(F("$PUBX,40,GGA,0,0,0,0*5A"));   // GGA = Fix information
+  //ss.print(F("$PUBX,40,GSV,0,0,0,0*59\r\n"));  //GSV = Satellite in View. #sentences,sentence#,#sat,[sat PRN#, elev degr, azi degr, SNR,] *check
+  ss.print(F("$PUBX,40,RMC,0,0,0,0*47\r\n"));    // RMC = recommended minimum, no Alt
+  // ss.print(F("$PUBX,40,GSA,0,0,0,0*4E\r\n"));  // GSA = Overall Satelite status. Auto/Manual,1/2/3 D fix, PRN1, ...PRN12 satt id, pdop,hdop,vdop,*check
+  // ss.println(F("$PUBX,40,GGA,0,0,0,0*5A"));   // GGA = Fix information. time,lat,N,lon,E,fix qual,num sat,hor dilution, alt,M,height geoid,M,time since DGPS,DGPS id, *check
 
   gps_read_chars(300);
 
@@ -629,20 +629,20 @@ void gps_SetMode_gpsRfOn() {
   gps_read_chars(100);
 }
 
-void x_gps_requestColdStart() {  // this erases all and wipes usefull info
-//  Serial.println(F("\n\nGPS cold start ");
-//
-//  //GPS Cold Start (Forced Watchdog)  cold start, clear all data, or cold start, factory reset
-//  //0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0x87, 0x00, 0x00, 0x94, 0xF5
-//
-//  byte arrCommand[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0x87, 0x00, 0x00, 0x94, 0xF5};
-//  //gps_calcChecksum(&arrCommand[2], sizeof(arrCommand) - 4);
-//  byte gps_okay=0;
-//  while(!gps_okay) {
-//    sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
-//    gps_okay=getUBX_ACK(arrCommand);
-//  }
-//  gps_read_chars(300);
+void gps_requestColdStart() {  // this erases all and wipes usefull info
+  Serial.println(F("\n\nGPS cold start "));
+
+  //GPS Cold Start (Forced Watchdog)  cold start, clear all data, or cold start, factory reset
+  //0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0x87, 0x00, 0x00, 0x94, 0xF5
+
+  const byte arrCommand[] = {0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0xFF, 0x87, 0x00, 0x00, 0x94, 0xF5};
+  //gps_calcChecksum(&arrCommand[2], sizeof(arrCommand) - 4);
+  byte gps_okay=0;
+  while(!gps_okay) {
+    sendUBX(arrCommand, sizeof(arrCommand)/sizeof(uint8_t));
+    gps_okay=getUBX_ACK(arrCommand);
+  }
+  gps_read_chars(300);
 }
 
 //////////////////////////////////////////////////
