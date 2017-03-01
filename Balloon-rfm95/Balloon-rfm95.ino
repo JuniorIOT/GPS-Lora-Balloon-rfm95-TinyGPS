@@ -54,7 +54,7 @@ long gps_nofix_count = 0;
 #include <SPI.h>  //MISO MOSI SCK stuff
 #include "keys.h"  // the personal keys to identify our own nodes
 
-const unsigned  TX_INTERVAL = 60; //  250;  // transmit interval, 5minutes is healthy according to TTN rules
+const unsigned  TX_INTERVAL = 300; //  300;  // transmit interval, 5 minutes is healthy according to TTN rules
 const dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
 const int  LMIC_DR_sequence_count = 12;
 int  LMIC_DR_sequence_index = 0;
