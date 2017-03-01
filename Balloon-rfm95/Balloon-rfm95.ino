@@ -942,7 +942,7 @@ void loop() {
   
   
   Serial.print(F("\nSleep GPS "));
-  //gps_SetMode_gpsRfOff();
+  gps_SetMode_gpsRfOff();
 
   //=--=-=---=--=-=--=-=--=  START SLEEP HERE -=-=--=-=-=-=-==-=-=-
 
@@ -967,7 +967,7 @@ void loop() {
   //=--=-=---=--=-=--=-=--=  SLEEP IS COMPLETED HERE -=-=--=-=-=-=-==-=-=-
   
 //    gps_SetMode_gpsOn();
-  //gps_SetMode_gpsRfOn();
+  gps_SetMode_gpsRfOn();
   Serial.println(F("Sleep done"));
 }
 
