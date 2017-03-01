@@ -947,9 +947,14 @@ void loop() {
   //=--=-=---=--=-=--=-=--=  START SLEEP HERE -=-=--=-=-=-=-==-=-=-
 
   unsigned long processedTime = millis() - startTime;
-  long sleeptime = TX_INTERVAL * 1000 - processedTime;
+  long sleeptime = TX_INTERVAL  - (processedTime / 1000);
   if ( sleeptime < 0 ) sleeptime = 0;
-  Serial.print(sleeptime / 1000);
+//  Serial.print(" TX_INTERVAL=" );
+//  Serial.print(TX_INTERVAL);
+//  Serial.print(" processedTime=" );
+//  Serial.print(processedTime);
+//  Serial.print(" sleeptime=" );
+//  Serial.print(sleeptime );
   Serial.println(F(" sec"));
   
   //LowPower.powerDown(SLEEP_4S, ADC_OFF, BOD_OFF);    // this kind of sleep does not work
@@ -957,7 +962,7 @@ void loop() {
   //Sleepy::loseSomeTime(8000);  // max 60.000 (60 sec)  // this kind of sleep does not work
   //Serial.println(F("delay "));
   
-  delay(sleeptime);
+  delay(sleeptime * 1000);
   
   //=--=-=---=--=-=--=-=--=  SLEEP IS COMPLETED HERE -=-=--=-=-=-=-==-=-=-
   
