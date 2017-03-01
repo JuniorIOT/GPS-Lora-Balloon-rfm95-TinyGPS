@@ -312,8 +312,12 @@ void gps_init() {
   gps_read_until_fix_or_timeout(60 * 60);  // after factory reset, time to first fix can be 15 minutes (or multiple).  gps needs to acquire full data which is sent out once every 15 minutes; sat data sent out once every 5 minutes
 
   //assume fix was found, go to airborne
-  gps_setNavMode(7); // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g -- with 6 no 2d fix supported
-  gps_read_until_fix_or_timeout(30 * 60);  // after factory reset, time to first fix can be 15 minutes (or multiple).  gps needs to acquire full data which is sent out once every 15 minutes; sat data sent out once every 5 minutes
+  // Lessons learned,
+  //       my gps does not find fix while on the ground in mode 6
+  //       does find fix in mode 7, but no re-fix after RF-off and RF-on
+  //       so for now we keep in mode 4 OR experiment with powermodes instead of RF_off
+  // gps_setNavMode(7); // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g -- with 6 no 2d fix supported
+  // gps_read_until_fix_or_timeout(30 * 60);  // after factory reset, time to first fix can be 15 minutes (or multiple).  gps needs to acquire full data which is sent out once every 15 minutes; sat data sent out once every 5 minutes
   //gps_setPowerMode(2);
 }
 
@@ -633,7 +637,7 @@ void gps_SetMode_gpsRfOn() {
   gps_read_chars(100);
 }
 
-void gps_requestColdStart() {  // this erases all and wipes usefull info
+void gps_requestColdStart() {  // this factory reset erases all and wipes usefull info
   Serial.println(F("\n\nGPS cold start "));
 
   //GPS Cold Start (Forced Watchdog)  cold start, clear all data, or cold start, factory reset
@@ -938,7 +942,7 @@ void loop() {
   
   
   Serial.print(F("\nSleep GPS "));
-  gps_SetMode_gpsRfOff();
+  //gps_SetMode_gpsRfOff();
 
   //=--=-=---=--=-=--=-=--=  START SLEEP HERE -=-=--=-=-=-=-==-=-=-
 
@@ -958,7 +962,7 @@ void loop() {
   //=--=-=---=--=-=--=-=--=  SLEEP IS COMPLETED HERE -=-=--=-=-=-=-==-=-=-
   
 //    gps_SetMode_gpsOn();
-  gps_SetMode_gpsRfOn();
+  //gps_SetMode_gpsRfOn();
   Serial.println(F("Sleep done"));
 }
 
