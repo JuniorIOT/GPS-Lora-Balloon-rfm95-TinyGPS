@@ -310,6 +310,10 @@ void gps_init() {
   
   gps_setPowerMode(1);  // 1=max power, 2=eco, 3=cyclic power save
   gps_read_until_fix_or_timeout(60 * 60);  // after factory reset, time to first fix can be 15 minutes (or multiple).  gps needs to acquire full data which is sent out once every 15 minutes; sat data sent out once every 5 minutes
+
+  //assume fix was found, go to airborne
+  gps_setNavMode(6); // 2=stationary, 3=pedestrian, 4=auto, 5=Sea, 6=airborne 1g, 7=air 2g, 8=air 4g
+  gps_read_until_fix_or_timeout(30 * 60);  // after factory reset, time to first fix can be 15 minutes (or multiple).  gps needs to acquire full data which is sent out once every 15 minutes; sat data sent out once every 5 minutes
   //gps_setPowerMode(2);
 }
 
