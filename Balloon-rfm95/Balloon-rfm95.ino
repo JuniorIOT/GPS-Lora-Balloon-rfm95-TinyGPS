@@ -9,25 +9,15 @@
  *
  * Do not forget to define the radio type correctly in config.h. in lmic library
  *
- * Modified By DenniZr - First test version
- *******************************************************************************/
+ * Modified By DenniZr & Marco van Schagen
+ *******************************************************************************/ 
+ // TODO: We will create a new TTN account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
  
- // done: investigate OTAA, good description here: Moteino, LMIC and OTAA Walkthrough https://github.com/lukastheiler/ttn_moteino
- // TODO: OTAA test code can be tested on device
- 
- // TODO: if no good read from GPS in last 2 minutes, then reset arduino as a manual reset fixes the problem?? Or auto-reset every 120 minutes. investigate
-
- // TODO: Add arduino sleep mode: need to change the radio scheduler to inline mode? see https://github.com/tijnonlijn/RFM-node/blob/master/template%20ttnmapper%20node%20-%20scheduling%20removed.ino
- 
- // TODO: We will also create a new account 'Kaasfabriek' at some later day where our teams wil be building their stuff.
- // TODO: Create and apply new device ID
-
 //#define DEBUG     // if DEBUG is defined, some code is added to display some basic debug info
 
 //#include "LowPower.h"   // help to do power save on the arduino  https://github.com/rocketscream/Low-Power
-
- //#include <JeeLib.h>  // Include library containing low power functions
- //ISR(WDT_vect) { Sleepy::watchdogEvent(); } // Setup for low power waiting
+//#include <JeeLib.h>  // Include library containing low power functions
+//ISR(WDT_vect) { Sleepy::watchdogEvent(); } // Setup for low power waiting
 
 //////////////////////////////////////////////
 // GPS libraries, mappings and things
@@ -35,7 +25,7 @@
 #include <SoftwareSerial.h> 
 #include <TinyGPS.h>
 
-SoftwareSerial ss(3, 2);  // ss RX, TX --> GPS TXD, RXD
+SoftwareSerial ss(3, 2);  // ss RX, TX --> gps TXD, RXD
 TinyGPS gps;
 long gps_fix_count = 0;
 long gps_nofix_count = 0;
@@ -43,31 +33,73 @@ long gps_nofix_count = 0;
 //////////////////////////////////////////////
 // LMIC and RFM95 mapping and things
 //////////////////////////////////////////////
-
-// // do not keep radio active to listen to return message in RX2. see https://github.com/matthijskooijman/arduino-lmic/blob/master/src/lmic/config.h
-// #define DISABLE_JOIN     // Uncomment this to disable all code related to joining
-#define DISABLE_PING     // Uncomment this to disable all code related to ping
-#define DISABLE_BEACONS  // Uncomment this to disable all code related to beacon tracking.// Requires ping to be disabled too 
-
 #include <lmic.h>
 #include <hal/hal.h>
-#include <SPI.h>  //MISO MOSI SCK stuff
-#include "keys.h"  // the personal keys to identify our own nodes
-
-const unsigned  TX_INTERVAL = 300; //  300;  // transmit interval, 5 minutes is healthy according to TTN rules
+const unsigned  TX_INTERVAL = 150;  // transmit interval, 5 minutes is healthy according to TTN rules; however 60 sec is still very well possible (risk is getting the device blacklisted rest of day)
 const dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
 const int  LMIC_DR_sequence_count = 12;
 int  LMIC_DR_sequence_index = 0;
 const  lmic_pinmap lmic_pins = { .nss = 14,    .rxtx = LMIC_UNUSED_PIN,    .rst = 10,    .dio = {17, 16, 15}, };
 
-uint8_t  mydata[14];  // mydata[9] allows for GPS location. a few bytes added to the memory buffer to play with
-const unsigned message_size = 11;  // 9 bytes are needed into the ttn tracker service
+const unsigned message_size = 12;  // including byte[0]
+uint8_t  mydata[message_size];  // including byte[0]
 // byte 0, 1, 2      Latitude     -90 to +90 rescaled to 0 - 16777215
 // byte 3, 4, 5      Longitude    -180 to + 180 rescaled to 0 - 16777215
 // byte 6, 7         Altitude     2 bytes in meters
 // byte 8            GPS DoP      1 byte
 // byte 9            Arduino VCC  1 byte in 50ths Volt
 // byte 10           cpu temp     1 byte -100 to 155 scaled to 0 - 255
+// byte 11           time to fix  1 byte: 
+      // 0..60 sec  at 1 sec interval <==> values 0 .. 60 
+      // 1..10 min at 5 sec interval  <==> values 60 ..  168
+      // 10..60 min at 1 min interval <==> values 168 .. 218
+      // 1..7 hour at 10 min interval <==> values 218 ..254; 255 is more than 7 hours
+
+// THIS BYTE STRING NEEDS A DECODER FUNCTION IN TTN:
+/*
+ * function Decoder (bytes) {
+  var _lat = ((bytes[0] << 16) + (bytes[1] << 8) + bytes[2]) / 16777215.0 * 180.0 - 90;
+  var _lng = ((bytes[3] << 16) + (bytes[4] << 8) + bytes[5]) / 16777215.0 * 360.0 - 180;
+  var _alt = (bytes[6] << 8) + bytes[7];
+  var _acc = bytes[8] / 10.0;
+  var _VCC = bytes[9] / 50;
+  var _tempCPU = bytes[10] -100;
+  var _time_to_fix_bin = bytes[11];
+  var _time_to_fix;
+  if (_time_to_fix_bin>=218) { _time_to_fix = 60*60+(_time_to_fix_bin-218)*600 }
+  else if (_time_to_fix_bin>=168) { _time_to_fix = 10*60+(_time_to_fix_bin-168)*60 }
+  else if (_time_to_fix_bin>=60) {  _time_to_fix = 60+(_time_to_fix_bin-60)*5 }
+  else  {_time_to_fix = _time_to_fix_bin }
+  
+      // 0..60 sec  at 1 sec interval <==> values 0 .. 60 
+      // 1..10 min at 5 sec interval  <==> values 60 ..  168
+      // 10..60 min at 1 min interval <==> values 168 .. 218
+      // 1..7 hour at 10 min interval <==> values 218 ..254; 255 means "more than 7 hours"
+      
+  var _inputHEX = bytes[0].toString(16)+' '+bytes[1].toString(16)+' '+bytes[2].toString(16)
+                  +' '+bytes[3].toString(16)+' '+bytes[4].toString(16)+' '+bytes[5].toString(16)
+                  +' '+bytes[6].toString(16)+' '+bytes[7].toString(16)+' '+bytes[8].toString(16)
+                  +' / '+bytes[9].toString(16)+' '+bytes[10].toString(16)+' '+bytes[11].toString(16);
+  return {
+    gps_lat: _lat,
+    gps_lng: _lng,
+    gps_alt: _alt,
+    gps_prec: _acc,
+    arduino_VCC: _VCC,
+    arduino_temp: _tempCPU,
+    time_to_fix: _time_to_fix,
+    payload: _inputHEX
+  };
+}
+*/
+
+// // do not keep radio active to listen to return message in RX2. see https://github.com/matthijskooijman/arduino-lmic/blob/master/src/lmic/config.h
+// #define DISABLE_JOIN     // Uncomment this to disable all code related to joining
+#define DISABLE_PING     // Uncomment this to disable all code related to ping
+#define DISABLE_BEACONS  // Uncomment this to disable all code related to beacon tracking.// Requires ping to be disabled too 
+
+#include <SPI.h>  //MISO MOSI SCK stuff
+#include "keys.h"  // the personal keys to identify our own nodes
 
 static  osjob_t sendjob;
 
@@ -879,7 +911,7 @@ long readVcc() {  //http://dumbpcs.blogspot.nl/2013/07/arduino-secret-built-in-t
   return result;
 }
 
-void put_other_values_into_sendbuffer() {
+void put_VCC_and_Temp_into_sendbuffer() {
   long vcc = readVcc();
   uint8_t vcc_bin = vcc /20 ;  // rescale 0-5100 milli volt into 0 - 255 values
   mydata[9] = vcc_bin;
@@ -901,21 +933,49 @@ void put_other_values_into_sendbuffer() {
   #endif
 }
 
+void put_TimeToFix_into_sendbuffer(int TimeToFix_Seconds) {  // time to fix onto gps coordinates
+  int TimeToFix_Calculate;  // this helps to calculate but no round-off yet
+  if ( TimeToFix_Seconds < 0) {
+    TimeToFix_Calculate=0;
+  } else if ( TimeToFix_Seconds <= (1 * 60) ) {  
+    TimeToFix_Calculate = TimeToFix_Seconds;                  // 0..60 sec  at 1 sec interval <==> values 0 .. 60 
+  } else if ( TimeToFix_Seconds <= (10 * 60) ) {    
+    TimeToFix_Calculate = 60 + (TimeToFix_Seconds - (1* 60) )/5 ;   // 1..10 min at 5 sec interval  <==> values 60 ..  168 
+  } else if ( TimeToFix_Seconds <= (60 * 60) ) {  
+    TimeToFix_Calculate = 168 + (TimeToFix_Seconds - (10 * 60) )/60 ;   // 10..60 min at 1 min interval <==> values 168 .. 218     
+  } else {
+    TimeToFix_Calculate = 218 + (TimeToFix_Seconds - (60 * 60) )/600 ;    // 1..7:00 hour at 10 min interval <==> values 218 ..254   
+  }
+  if (TimeToFix_Calculate>255) TimeToFix_Calculate = 255 ;                  //  more than 7 hour = 255
+  
+  uint8_t TimeToFix_bin = TimeToFix_Calculate;  // this can contain the values 0..255,
+      
+  mydata[11] = TimeToFix_bin;
+  #ifdef DEBUG
+  Serial.print(F("TTF="));
+  Serial.print(TimeToFix_Seconds);
+  Serial.print(F(" sec. TimeToFix_bin="));
+  Serial.print(TimeToFix_bin);
+  #endif
+}
+
 
 ///////////////////////////////////////////////
 //  arduino init and main
 ///////////////////////////////////////////
+
+unsigned long device_startTime;
+bool has_sent_allready = false; 
 
 void setup() {
     Serial.begin(115200);   // whether 9600 or 115200; the gps feed shows repeated char and cannot be interpreted, setting high value to release system time
     
     Serial.print(F("\n\n*** Starting ***\ndevice:")); Serial.println(myDeviceName); 
     Serial.println();
-
+    device_startTime = millis();
 
     gps_init();
     lmic_init();  
-    
 }
 
 void loop() {
@@ -929,7 +989,14 @@ void loop() {
   //gps_Snooze();
 
   Serial.println(F("\nRead values"));
-  put_other_values_into_sendbuffer();
+  put_VCC_and_Temp_into_sendbuffer();
+  
+  int Time_till_now = (millis() - startTime) / 1000 ; 
+  if (!has_sent_allready) {
+    has_sent_allready = true;
+    Time_till_now = (millis() - device_startTime) / 1000 ; // only the first message tells the world the device boot time till first fix/send
+  }
+  put_TimeToFix_into_sendbuffer( Time_till_now );
   
   Serial.println(F("\nSending"));
   do_send();
@@ -941,9 +1008,9 @@ void loop() {
   Serial.println(F("TX_COMPL"));
   
   
-  Serial.print(F("\nSleep GPS "));
   gps_SetMode_gpsRfOff();
 
+  Serial.print(F("\nSleep GPS "));
   //=--=-=---=--=-=--=-=--=  START SLEEP HERE -=-=--=-=-=-=-==-=-=-
 
   unsigned long processedTime = millis() - startTime;
@@ -954,7 +1021,7 @@ void loop() {
 //  Serial.print(" processedTime=" );
 //  Serial.print(processedTime);
 //  Serial.print(" sleeptime=" );
-//  Serial.print(sleeptime );
+  Serial.print(sleeptime );
   Serial.println(F(" sec"));
   
   //LowPower.powerDown(SLEEP_4S, ADC_OFF, BOD_OFF);    // this kind of sleep does not work
@@ -995,3 +1062,7 @@ void loop() {
 // met DEBUG aan:
 // Sketch uses 30626 bytes (99%) of program storage space. Maximum is 30720 bytes.
 // Global variables use 1331 bytes (64%) of dynamic memory, leaving 717 bytes for local variables. Maximum is 2048 bytes.
+
+// 2 march
+// Sketch uses 28760 bytes (93%) of program storage space. Maximum is 30720 bytes.
+// Global variables use 1317 bytes (64%) of dynamic memory, leaving 731 bytes for local variables. Maximum is 2048 bytes.
