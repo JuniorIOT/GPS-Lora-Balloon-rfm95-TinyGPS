@@ -35,7 +35,7 @@ long gps_nofix_count = 0;
 //////////////////////////////////////////////
 #include <lmic.h>
 #include <hal/hal.h>
-const unsigned  TX_INTERVAL = 60;  // previously tested with 300=5 minutes; 15 hours battery time but many gps losses // transmit interval, 5 minutes is healthy according to TTN rules; however 60 sec is still very well possible (risk is getting the device blacklisted rest of day)
+const unsigned  TX_INTERVAL = 120;  // previously tested with 300=5 minutes; 15 hours battery time but many gps losses // transmit interval, 5 minutes is healthy according to TTN rules; however 60 sec is still very well possible (risk is getting the device blacklisted rest of day)
 const dr_t LMIC_DR_sequence[] = {DR_SF10, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF9, DR_SF7, DR_SF7, DR_SF7, DR_SF7, DR_SF7 };      //void LMIC_setDrTxpow (dr_t dr, s1_t txpow)
 const int  LMIC_DR_sequence_count = 12;
 int  LMIC_DR_sequence_index = 0;
