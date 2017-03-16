@@ -43,21 +43,20 @@ const  lmic_pinmap lmic_pins = { .nss = 14,    .rxtx = LMIC_UNUSED_PIN,    .rst 
 
 const unsigned message_size = 12;  // including byte[0]
 uint8_t  mydata[message_size];  // including byte[0]
-// byte 0, 1, 2      Latitude     -90 to +90 rescaled to 0 - 16777215
-// byte 3, 4, 5      Longitude    -180 to + 180 rescaled to 0 - 16777215
-// byte 6, 7         Altitude     2 bytes in meters
-// byte 8            GPS DoP      1 byte
-// byte 9            Arduino VCC  1 byte in 50ths Volt
-// byte 10           cpu temp     1 byte -100 to 155 scaled to 0 - 255
-// byte 11           time to fix  1 byte: 
+// byte 0, 1, 2      Latitude       3 bytes: -90 to +90 degrees rescaled to 0 - 16777215
+// byte 3, 4, 5      Longitude      3 bytes: -180 to + 180 degrees rescaled to 0 - 16777215
+// byte 6, 7         Altitude       2 bytes: in meters. 0 - 65025 meter
+// byte 8            GPS DoP        1 byte: in 0.1 values.  0 - 25.5 DoP
+// byte 9            Arduino VCC    1 byte in 50ths Volt. 0 - 5.10 volt
+// byte 10           cpu temp       1 byte  value -100. -100 - 155 deg C
+// byte 11           time to fix    1 byte: special finction, 10% accuracy 1 sec - 7 hours
       // 0..60 sec  at 1 sec interval <==> values 0 .. 60 
       // 1..10 min at 5 sec interval  <==> values 60 ..  168
       // 10..60 min at 1 min interval <==> values 168 .. 218
       // 1..7 hour at 10 min interval <==> values 218 ..254; 255 is "more than 7 hours"
 
 // THIS BYTE STRING NEEDS A DECODER FUNCTION IN TTN:
-/*
- * function Decoder (bytes) {
+/* * function Decoder (bytes) {
   var _lat = ((bytes[0] << 16) + (bytes[1] << 8) + bytes[2]) / 16777215.0 * 180.0 - 90;
   var _lng = ((bytes[3] << 16) + (bytes[4] << 8) + bytes[5]) / 16777215.0 * 360.0 - 180;
   var _alt = (bytes[6] << 8) + bytes[7];
@@ -983,10 +982,8 @@ void loop() {
   
   Serial.println(F("\n\nRead GPS"));
 
-  //gps_wakeup();
   gps_read_until_fix_or_timeout(5*60); // try up to 5 minutes to get a fix
   gps_read_5sec();  // 5 sec extra to get stronger fix
-  //gps_Snooze();
 
   Serial.println(F("\nRead values"));
   put_VCC_and_Temp_into_sendbuffer();
@@ -1039,30 +1036,3 @@ void loop() {
 }
 
 
-// without float
-// Sketch uses 13794 bytes (44%) of program storage space. Maximum is 30720 bytes.
-// Global variables use 1669 bytes (81%) of dynamic memory, leaving 379 bytes for local variables. Maximum is 2048 bytes.
-// Low memory available, stability problems may occur.
-
-// with float
-// Sketch uses 13996 bytes (45%) of program storage space. Maximum is 30720 bytes.
-// Global variables use 1669 bytes (81%) of dynamic memory, leaving 379 bytes for local variables. Maximum is 2048 bytes.
-// Low memory available, stability problems may occur.
-
-// with debug
-// Sketch uses 15944 bytes (51%) of program storage space. Maximum is 30720 bytes.
-// Global variables use 1967 bytes (96%) of dynamic memory, leaving 81 bytes for local variables. Maximum is 2048 bytes.
-// Low memory available, stability problems may occur.
-//    ++> ERROR in radio.c:815
-
-// after F(..) in all print calls:
-// Sketch uses 28678 bytes (93%) of program storage space. Maximum is 30720 bytes.
-// Global variables use 1335 bytes (65%) of dynamic memory, leaving 713 bytes for local variables. Maximum is 2048 bytes.
-
-// met DEBUG aan:
-// Sketch uses 30626 bytes (99%) of program storage space. Maximum is 30720 bytes.
-// Global variables use 1331 bytes (64%) of dynamic memory, leaving 717 bytes for local variables. Maximum is 2048 bytes.
-
-// 2 march
-// Sketch uses 28760 bytes (93%) of program storage space. Maximum is 30720 bytes.
-// Global variables use 1317 bytes (64%) of dynamic memory, leaving 731 bytes for local variables. Maximum is 2048 bytes.
