@@ -22,7 +22,7 @@ how to build your first node, practical soldering tips in nice pictures,
 https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself
  --> you will need to use our pin mapping instead
 
-##Pin mapping
+## Pin mapping
 ```
     Suggested pin mapping:
     this new mapping puts the boards next to each other as shown in schema below,
