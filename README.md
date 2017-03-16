@@ -1,10 +1,10 @@
 ﻿# GPS-Lora-Balloon-rfm95-TinyGPS
 
-##Libraries required
+## Libraries required
 - TinyGPS       https://github.com/mikalhart/TinyGPS
 - arduino-lmic  https://github.com/matthijskooijman/arduino-lmic
 
-##Lora location transmittor with TinyGPS and rfm95 for Kaasfabriek project
+## Lora location transmittor with TinyGPS and rfm95 for Kaasfabriek project
 ```
   adjustment for fablab Kaasfabriek Junior IoT Baloon Challenge february 2017
              met leerling teams bij fablab de Kaasfabriek in Alkmaar
@@ -17,12 +17,13 @@ See https://www.thethingsnetwork.org/labs/story/junior-iot-ballonnen-challenge
 - Educatie kletser: Marco --> marco@kaasfabriek.nl
 - Regie en inspiratie: Kaasfabriek --> info at kaasfabriek punt nl
 
-##Important
+## Important
 how to build your first node, practical soldering tips in nice pictures,
 https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-yourself
  --> you will need to use our pin mapping instead
 
 ##Pin mapping
+```
     Suggested pin mapping:
     this new mapping puts the boards next to each other as shown in schema below,
           can be folded into compact stack or embedded in a business card size
@@ -60,4 +61,4 @@ https://www.thethingsnetwork.org/labs/story/build-the-cheapest-possible-node-you
                              ╚═══════╝ │ │                         ╚═════════╝
                                       JST female connector
                                       to LiPo charger with protect
-         
+```
