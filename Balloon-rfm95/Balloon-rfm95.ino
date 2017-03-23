@@ -982,7 +982,7 @@ void loop() {
   
   Serial.println(F("\n\nRead GPS"));
 
-  gps_read_until_fix_or_timeout(5*60); // try up to 5 minutes to get a fix
+  gps_read_until_fix_or_timeout(2*60); // try up to 5 minutes to get a fix
   gps_read_5sec();  // 5 sec extra to get stronger fix
 
   Serial.println(F("\nRead values"));
